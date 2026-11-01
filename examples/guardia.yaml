@@ -1,0 +1,160 @@
+# Cena da Guardiã do Farol Partido, escrita na linguagem de cena.
+# Coordenadas normalizadas (x para a direita, y para baixo). Direções são sempre
+# do ponto de vista de quem vê a imagem.
+scene: "Guardiã do Farol Partido"
+version: 1
+
+canvas: {shape: rect, ratio: "16:9"}
+grid: {kind: golden}
+
+style:
+  base: "splash art de MOBA, pintura digital semi-realista de alta qualidade"
+  mix:
+    "splash art de MOBA": 70
+    "pintura digital semi-realista": 30
+
+intent:
+  emotion: "resistência serena diante de algo colossal"
+  story: "uma guardiã ergue a luz do cristal contra a tempestade e o colosso"
+  focal: spear.tip
+
+camera:
+  angle: low
+  lens: wide
+  focus: [spear.tip, warrior.face]
+  depth_blur: "desfoque atmosférico suave no farol e na tempestade"
+
+palette:
+  dominant: [azul-marinho, roxo profundo, turquesa]
+  accent: dourado
+  accent_use: "apenas na fenda do céu, no rim light do rosto e nas cristas das ondas"
+  notes: ["o bronze fica restrito à armadura"]
+
+lights:
+  - role: key
+    color: "fria, turquesa"
+    source: spear
+    hits: [warrior]
+  - role: backlight
+    color: dourado
+    source: sky_rift
+    hits: [warrior.face, spear.tip]
+    note: "raios diagonais descendo da fenda em direção ao cristal"
+
+entities:
+  - id: warrior
+    kind: character
+    label: "a guerreira"
+    desc: "guerreira original de corpo inteiro, armadura bronze e azul-marinho com texturas detalhadas de metal, cabelo longo e capa ao vento em curva na direção do cristal, pés firmes sobre rocha molhada com respingos ao redor das botas"
+    plane: foreground
+    box: [0.30, 0.28, 0.34, 0.68]
+
+  - id: spear
+    kind: prop
+    label: "a lança de cristal"
+    desc: "lança de cristal segurada pela guerreira, com a ponta de cristal emitindo luz turquesa e faíscas orbitando"
+    plane: foreground
+    box: [0.381966, 0.381966, 0.17, 0.25]
+    orient: up_left
+    brightness: max
+    saturation: max
+    tags: [focal]
+
+  - id: colossus
+    kind: creature
+    label: "o colosso"
+    desc: "colosso de pedra e raízes emergindo do mar, com runas turquesa suaves e mais fracas que o cristal nas fendas"
+    plane: midground
+    box: [0.56, 0.12, 0.38, 0.62]
+
+  - id: ally_a
+    kind: character
+    label: "o primeiro aliado"
+    desc: "aliado minúsculo de capa azul escalando o braço do colosso, em silhueta nítida"
+    plane: midground
+    box: [0.80, 0.30, 0.05, 0.09]
+    tags: [ally]
+
+  - id: ally_b
+    kind: character
+    label: "o segundo aliado"
+    desc: "aliado minúsculo de cachecol vermelho escalando o braço do colosso, em silhueta nítida"
+    plane: midground
+    box: [0.74, 0.42, 0.05, 0.09]
+    tags: [ally]
+
+  - id: wreck
+    kind: prop
+    label: "o navio naufragado"
+    desc: "navio naufragado com bandeiras rasgadas, cordas e correntes"
+    plane: midground
+    box: [0.70, 0.62, 0.28, 0.34]
+
+  - id: sea
+    kind: terrain
+    label: "o mar"
+    desc: "ondas explodindo contra os destroços, com espuma de reflexo dourado e turquesa nas cristas"
+    plane: midground
+    box: [0.0, 0.74, 1.0, 0.26]
+
+  - id: lighthouse
+    kind: structure
+    label: "o farol"
+    desc: "farol gigante partido ao meio, com uma fenda vertical visível e as duas metades separadas, em silhueta escura"
+    plane: background
+    box: [0.78, 0.03, 0.18, 0.50]
+    brightness: low
+    saturation: muted
+
+  - id: sky_rift
+    kind: effect
+    label: "a fenda dourada"
+    desc: "rasgo de luz dourada no centro-superior do céu, com raios diagonais descendo para a guerreira e o cristal"
+    plane: background
+    box: [0.40, 0.0, 0.22, 0.18]
+    brightness: high
+    saturation: high
+
+  - id: storm
+    kind: sky
+    label: "o céu"
+    desc: "nuvens roxas densas e escuras, com raios distantes"
+    plane: background
+    box: [0.0, 0.0, 1.0, 0.30]
+    brightness: low
+    saturation: muted
+
+gaze:
+  - spear.tip
+  - warrior.face
+  - colossus.head
+  - lighthouse
+
+asserts:
+  - focal_single
+  - brightest(spear)
+  - facing(spear, up_left)
+  - above(spear.tip, warrior.shoulder)
+  - near(spear.tip, pt_ul)
+  - visible(warrior.feet)
+  - left_of(warrior, colossus)
+  - above(sky_rift, warrior)
+  - count(ally) == 2
+  - inside(ally_a, colossus)
+  - inside(ally_b, colossus)
+
+glossary:
+  ally: "aliados"
+
+details:
+  - "respingos de água suspensos"
+  - "fragmentos de pedra flutuando entre a guerreira e o colosso"
+  - "rim light dourado no rosto da guerreira"
+
+finish: "contornos suaves, alto detalhe no primeiro plano, atmosfera densa nos planos distantes"
+
+avoid:
+  - "dois pontos focais competindo"
+  - "personagem centralizada no meio exato do quadro"
+  - "saturação alta fora do ponto focal"
+  - "texto ou logotipos"

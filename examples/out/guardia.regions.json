@@ -1,0 +1,251 @@
+{
+  "canvas": {
+    "shape": "rect",
+    "ratio": "16:9",
+    "size_px": [
+      1344,
+      752
+    ]
+  },
+  "global_prompt": "splash art de MOBA, pintura digital semi-realista de alta qualidade; predominantemente splash art de MOBA (70%), com influência de pintura digital semi-realista (30%) Proporção 16:9. Composição pela grade áurea. dominantes azul-marinho, roxo profundo, turquesa; acento dourado, usado apenas na fenda do céu, no rim light do rosto e nas cristas das ondas; o bronze fica restrito à armadura. levemente de baixo para cima, grande angular cinematográfica; nitidez máxima na ponta da lança de cristal e no rosto da guerreira; desfoque atmosférico suave no farol e na tempestade.",
+  "style_weights": {
+    "splash art de MOBA": 0.7,
+    "pintura digital semi-realista": 0.3
+  },
+  "focal": {
+    "ref": "spear.tip",
+    "xy_norm": [
+      0.382,
+      0.382
+    ],
+    "xy_px": [
+      513,
+      287
+    ]
+  },
+  "priorities": [
+    "O ponto focal é único: a ponta da lança de cristal, no ponto de interesse superior esquerdo da grade.",
+    "A lança de cristal é o elemento mais brilhante e mais saturado da imagem.",
+    "A orientação da lança de cristal é para cima e para a esquerda (do ponto de vista de quem vê a imagem).",
+    "A ponta da lança de cristal fica acima do ombro da guerreira.",
+    "A ponta da lança de cristal fica no ponto de interesse superior esquerdo da grade.",
+    "Visível por inteiro dentro do quadro: os pés da guerreira.",
+    "A guerreira fica à esquerda do colosso.",
+    "A fenda dourada fica acima da guerreira.",
+    "Há exatamente 2 aliados.",
+    "O primeiro aliado fica dentro do colosso.",
+    "O segundo aliado fica dentro do colosso."
+  ],
+  "regions": [
+    {
+      "id": "lighthouse",
+      "label": "o farol",
+      "kind": "structure",
+      "plane": "background",
+      "box_norm": [
+        0.78,
+        0.03,
+        0.18,
+        0.5
+      ],
+      "box_px": [
+        1048,
+        23,
+        242,
+        376
+      ],
+      "orient": null,
+      "weight": 0.6,
+      "prompt": "farol gigante partido ao meio, com uma fenda vertical visível e as duas metades separadas, em silhueta escura"
+    },
+    {
+      "id": "sky_rift",
+      "label": "a fenda dourada",
+      "kind": "effect",
+      "plane": "background",
+      "box_norm": [
+        0.4,
+        0.0,
+        0.22,
+        0.18
+      ],
+      "box_px": [
+        538,
+        0,
+        296,
+        135
+      ],
+      "orient": null,
+      "weight": 1.2,
+      "prompt": "rasgo de luz dourada no centro-superior do céu, com raios diagonais descendo para a guerreira e o cristal"
+    },
+    {
+      "id": "storm",
+      "label": "o céu",
+      "kind": "sky",
+      "plane": "background",
+      "box_norm": [
+        0.0,
+        0.0,
+        1.0,
+        0.3
+      ],
+      "box_px": [
+        0,
+        0,
+        1344,
+        226
+      ],
+      "orient": null,
+      "weight": 0.6,
+      "prompt": "nuvens roxas densas e escuras, com raios distantes"
+    },
+    {
+      "id": "colossus",
+      "label": "o colosso",
+      "kind": "creature",
+      "plane": "midground",
+      "box_norm": [
+        0.56,
+        0.12,
+        0.38,
+        0.62
+      ],
+      "box_px": [
+        753,
+        90,
+        511,
+        466
+      ],
+      "orient": null,
+      "weight": 1.0,
+      "prompt": "colosso de pedra e raízes emergindo do mar, com runas turquesa suaves e mais fracas que o cristal nas fendas"
+    },
+    {
+      "id": "ally_a",
+      "label": "o primeiro aliado",
+      "kind": "character",
+      "plane": "midground",
+      "box_norm": [
+        0.8,
+        0.3,
+        0.05,
+        0.09
+      ],
+      "box_px": [
+        1075,
+        226,
+        67,
+        68
+      ],
+      "orient": null,
+      "weight": 1.0,
+      "prompt": "aliado minúsculo de capa azul escalando o braço do colosso, em silhueta nítida"
+    },
+    {
+      "id": "ally_b",
+      "label": "o segundo aliado",
+      "kind": "character",
+      "plane": "midground",
+      "box_norm": [
+        0.74,
+        0.42,
+        0.05,
+        0.09
+      ],
+      "box_px": [
+        995,
+        316,
+        67,
+        68
+      ],
+      "orient": null,
+      "weight": 1.0,
+      "prompt": "aliado minúsculo de cachecol vermelho escalando o braço do colosso, em silhueta nítida"
+    },
+    {
+      "id": "wreck",
+      "label": "o navio naufragado",
+      "kind": "prop",
+      "plane": "midground",
+      "box_norm": [
+        0.7,
+        0.62,
+        0.28,
+        0.34
+      ],
+      "box_px": [
+        941,
+        466,
+        376,
+        256
+      ],
+      "orient": null,
+      "weight": 1.0,
+      "prompt": "navio naufragado com bandeiras rasgadas, cordas e correntes"
+    },
+    {
+      "id": "sea",
+      "label": "o mar",
+      "kind": "terrain",
+      "plane": "midground",
+      "box_norm": [
+        0.0,
+        0.74,
+        1.0,
+        0.26
+      ],
+      "box_px": [
+        0,
+        556,
+        1344,
+        196
+      ],
+      "orient": null,
+      "weight": 1.0,
+      "prompt": "ondas explodindo contra os destroços, com espuma de reflexo dourado e turquesa nas cristas"
+    },
+    {
+      "id": "warrior",
+      "label": "a guerreira",
+      "kind": "character",
+      "plane": "foreground",
+      "box_norm": [
+        0.3,
+        0.28,
+        0.34,
+        0.68
+      ],
+      "box_px": [
+        403,
+        211,
+        457,
+        511
+      ],
+      "orient": null,
+      "weight": 1.0,
+      "prompt": "guerreira original de corpo inteiro, armadura bronze e azul-marinho com texturas detalhadas de metal, cabelo longo e capa ao vento em curva na direção do cristal, pés firmes sobre rocha molhada com respingos ao redor das botas"
+    },
+    {
+      "id": "spear",
+      "label": "a lança de cristal",
+      "kind": "prop",
+      "plane": "foreground",
+      "box_norm": [
+        0.382,
+        0.382,
+        0.17,
+        0.25
+      ],
+      "box_px": [
+        513,
+        287,
+        228,
+        188
+      ],
+      "orient": "up_left",
+      "weight": 1.5,
+      "prompt": "lança de cristal segurada pela guerreira, com a ponta de cristal emitindo luz turquesa e faíscas orbitando, orientação para cima e para a esquerda (do ponto de vista de quem vê a imagem)"
+    }
+  ]
+}
