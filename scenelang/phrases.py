@@ -75,11 +75,19 @@ def target_phrase(scene, ref: str) -> str:
     return f"{V.ANCHOR_PT[t.anchor]} {de(t.entity.label)}"
 
 
+def point_with_percent(grid_kind: str, name: str) -> str:
+    """Ponto de interesse com coordenadas em %, para o modelo não confundir com o canto do quadro."""
+    from . import layout as L
+
+    x, y = L.point_xy(grid_kind, name)
+    return f"{V.POINT_PT[name]} (a cerca de {round(x * 100)}% da esquerda e {round(y * 100)}% do topo, longe da borda)"
+
+
 def target_position(scene, ref: str) -> str:
     """Frase de posição: 'no ponto de interesse ...' ou 'na região ...'."""
     t = scene.resolve(ref)
     if t.kind == "point":
-        return V.POINT_PT[t.id]
+        return point_with_percent(scene.grid_kind, t.id)
     if t.kind == "region":
         return region_in(t.id)
     return "junto " + de(target_phrase(scene, ref))
@@ -111,7 +119,7 @@ def position_of_point(grid_kind: str, pt: tuple[float, float], tol: float = 0.03
     for name in V.POINT_NAMES:
         gx, gy = L.point_xy(grid_kind, name)
         if abs(pt[0] - gx) <= tol and abs(pt[1] - gy) <= tol:
-            return V.POINT_PT[name]
+            return point_with_percent(grid_kind, name)
     return region_in(L.region_of(grid_kind, pt[0], pt[1]))
 
 

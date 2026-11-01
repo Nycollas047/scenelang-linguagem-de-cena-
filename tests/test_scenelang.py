@@ -243,7 +243,9 @@ def test_prose_contractions(data):
 
 def test_oriented_prop_described_by_tip_and_base(data):
     _, scene = validate_data(data)
-    assert "A lança de cristal, com a ponta no ponto de interesse superior esquerdo da grade e a base" in to_prose(scene)
+    prose = to_prose(scene)
+    assert "A lança de cristal, com a ponta no ponto de interesse superior esquerdo da grade" in prose
+    assert "a cerca de 38% da esquerda e 38% do topo, longe da borda" in prose  # não confundir com o canto
 
 
 def test_json_has_priorities_first_and_is_valid(data):
