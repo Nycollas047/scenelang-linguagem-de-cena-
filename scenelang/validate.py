@@ -406,6 +406,9 @@ def _check_asserts(c: _Collector, data: dict, scene: Scene | None) -> None:
         except AssertSyntaxError as e:
             c.error(p, str(e), got=raw, accepted=list(V.PREDICATES), hint=_suggest(raw.split("(")[0].strip(), V.PREDICATES))
             continue
+        if a.name == "count" and a.args[0] not in (data.get("glossary") or {}):
+            c.warn(p, "count sem glossário: o prompt sairia com a etiqueta crua", got=a.args[0],
+                   hint=f"adicione em glossary: {a.args[0]}: \"<nome no plural>\"")
         if scene is not None and not any(arg.split(".")[0] in c.skipped for arg in a.args):
             try:
                 check_refs(scene, a)

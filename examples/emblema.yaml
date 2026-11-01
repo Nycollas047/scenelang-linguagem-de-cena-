@@ -1,0 +1,91 @@
+# Emblema circular: testa quadro em círculo, grade de terços e contagem.
+scene: "Emblema da Raposa e da Lua"
+version: 1
+
+canvas: {shape: circle, ratio: "1:1"}
+grid: {kind: thirds}
+
+style:
+  base: "ilustração vetorial de emblema, traço limpo, cores chapadas com leve textura"
+  mix:
+    "emblema vetorial": 80
+    "gravura antiga": 20
+
+intent:
+  emotion: "calma noturna e astúcia"
+  story: "uma raposa de pé sobre uma colina olha para a lua cheia"
+  focal: moon.center
+
+camera:
+  angle: eye
+  lens: normal
+  focus: [moon.center]
+
+palette:
+  dominant: [azul-noite, índigo]
+  accent: laranja
+  accent_use: "apenas na pelagem da raposa"
+
+lights:
+  - role: key
+    color: "prateada"
+    source: moon
+    hits: [fox]
+
+entities:
+  - id: moon
+    kind: light_source
+    label: "a lua cheia"
+    desc: "lua cheia grande e luminosa, com crateras sutis e um halo prateado"
+    plane: background
+    box: [0.55, 0.14, 0.26, 0.26]
+    brightness: max
+    saturation: normal
+    tags: [focal]
+
+  - id: fox
+    kind: creature
+    label: "a raposa"
+    desc: "raposa laranja de pé, de perfil, com cauda volumosa e olhar voltado para a lua"
+    plane: midground
+    box: [0.22, 0.42, 0.34, 0.34]
+    orient: up_right
+
+  - id: hill
+    kind: terrain
+    label: "a colina"
+    desc: "colina curva em azul-noite com capim estilizado"
+    plane: foreground
+    box: [0.12, 0.66, 0.76, 0.18]
+
+  - id: star_a
+    kind: effect
+    label: "a estrela da esquerda"
+    desc: "estrela pequena de quatro pontas"
+    plane: background
+    box: [0.28, 0.18, 0.06, 0.06]
+    tags: [star]
+
+  - id: star_b
+    kind: effect
+    label: "a estrela do alto"
+    desc: "estrela pequena de quatro pontas"
+    plane: background
+    box: [0.42, 0.10, 0.06, 0.06]
+    tags: [star]
+
+gaze: [moon.center, fox.tip, hill]
+
+asserts:
+  - "above(moon, fox)"
+  - "right_of(moon, fox)"
+  - "above(fox, hill)"
+  - "facing(fox, up_right)"
+  - "count(star) >= 2"
+  - "visible(fox)"
+  - "focal_single()"
+finish: "bordas limpas, sem texto"
+avoid:
+  - "nada de texto ou logotipo"
+glossary:
+  star: "estrelas de quatro pontas"

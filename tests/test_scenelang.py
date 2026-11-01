@@ -364,3 +364,10 @@ def test_broken_entity_does_not_cascade_into_reference_errors(data):
     diags, _ = validate_data(data)
     # asserts que citam a lança não geram erros de "referência inexistente" em cascata
     assert not any("referência a algo que não existe" in d.message and "spear" in str(d) for d in errors(diags))
+
+
+def test_count_without_glossary_warns(data):
+    data["glossary"].pop("ally")
+    diags, scene = validate_data(data)
+    assert scene is not None
+    assert any("glossário" in d.message and d.level == "warning" for d in diags)
