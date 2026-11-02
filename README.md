@@ -2,17 +2,13 @@
 
 > A cena é o código-fonte; o prompt é o binário.
 
-**scenelang** é uma linguagem declarativa (YAML) para descrever uma imagem como uma cena estruturada:
-quadro, grade de composição, entidades com posição, plano e orientação, luz, câmera, paleta, ordem do olhar
-e **asserts** verificáveis. Um compilador transforma a cena em prompt para qualquer modelo de imagem
-(texto, JSON ou regiões), e um ciclo de avaliação reforça o que o modelo errou.
-
-**Ideia central:** mover para código determinístico o que modelos de imagem fazem mal
-(layout, direção, contagem, cor exata, recorte) e deixar ao modelo textura, luz e estilo.
+**scenelang** é uma linguagem declarativa (YAML) para descrever uma imagem como uma cena estruturada.
+Um compilador transforma a cena em prompt para qualquer modelo de imagem; verificadores em código
+medem o resultado. A linguagem declara a intenção e o modelo tenta: cada falha medida é dado de avaliação e de treino.
 
 ![Esquema 2D da cena de exemplo](docs/guardia-esquema.png)
 
-## Instalação rápida
+## Instalação
 
 ```
 pip install -e .[dev]
@@ -20,62 +16,66 @@ scenelang validate examples/guardia.yaml
 scenelang compile examples/guardia.yaml --target prose
 ```
 
-Saídas compiladas do exemplo: [`examples/out/`](examples/out/).
-
-## Status
-
-Versão 0.1 (experimental): núcleo funcional (validar, compilar, verificar, desenhar esquema 2D, ciclo de avaliação).
-Camadas/alfa, crítico automático, previz 3D e integração com LLMs (MCP) estão no roteiro.
-A linguagem é neutra quanto a fornecedor e não contém mecanismos para contornar políticas de uso de modelos.
-
----
+## Como as peças se encaixam
 
 ```
-cena.yaml ─► validate ─► IR ─┬─► prose    (modelos só de texto)
-                             ├─► json     (prioridades no topo)
-                             └─► regions  (caixas, pesos, prompts por região)
-                                    │
-                     imagem gerada ─┴─► ficha de avaliação ─► reforço ─► recompila
-cena.yaml ─► check (asserts no layout) ─► render (esquema 2D SVG/PNG)
+cena.yaml ─► validate ─► IR ─┬─► prose / json / regions ─► modelo de imagem
+   ▲                         │                                    │
+   │   plan / plan-apply     └─► render (esquema 2D)              ▼
+   │   (o modelo propõe        imagem ─► verify (código) ─► placar automático
+   │    cores e guias)                └─► eval-form ─► eval-apply ─► reforço + trava
+   └──── extends / import / sweep (variações controladas)
 ```
+
+## Camadas da linguagem
+
+| Camada | Chaves | O que controla |
+|---|---|---|
+| Quadro e grade | `canvas` (rect/circle/ellipse, `pixel_grid`), `grid` (áurea, terços) | formato, grade de pixels, pontos de interesse |
+| Entidades | `entities` (box/at, `orient`, `brightness`, `saturation`) | posição, plano, direção, foco |
+| Cor | `colors`, `palette` (`mode: fixed\|model_picks`, RGB/CMYK/HSL, harmonia, contraste) | cores exatas ou escolhidas pelo modelo |
+| Guias | `guides` (cânone de cabeças, eixo, linhas, margem; `model_proposes`) | proporção e consistência |
+| Fundo | `background` (`chromakey`, `alpha: chroma\|difference`) | recorte e canal alfa |
+| Atmosfera | `atmosphere` (mood, clima, vento), `wind_parts` | coerência entre objetos leves e o vento |
+| Materiais | `materials`, `material`/`parts`, `detail` | textura por parte e orçamento de detalhe |
+| Intenção e olhar | `intent`, `gaze`, `lights`, `camera` | foco e ordem de leitura |
+| Verificação | `asserts` (layout), `verify` (imagem) | critérios mensuráveis |
+| Reuso | `extends`, `import`, `lock` | variantes, bibliotecas e partes travadas |
+
+Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
 
 ## Comandos
 
 | Comando | O que faz |
 |---|---|
-| `python -m scenelang validate CENA [--json]` | Valida tudo numa passada: vocabulário fechado, geometria, referências, foco único, olhar, asserts. Erros trazem caminho, valor recebido, aceitos e "você quis dizer…". |
-| `compile CENA --target prose\|json\|regions [--size 1344x752] [--out F]` | Compila a cena. Negações viram afirmações. |
-| `check CENA` | Avalia os asserts sobre o layout (sem gerar imagem). |
-| `render CENA --out F.png` | Esquema 2D: grade, caixas por plano, orientação, olhar, foco, resultado dos asserts. |
-| `eval-form CENA [--round N] [--out F]` | Gera a ficha de avaliação (uma pergunta por assert). |
-| `eval-apply CENA RESPOSTAS [--out F]` | Aplica sim/não + tag de rejeição; os itens que falharam sobem ao topo como "(reforço)" e entram no "LEMBRETE FINAL". |
-
-## Fluxo
-
-1. Escreva a cena (`examples/guardia.yaml`).
-2. `validate` → `check` → `render` para conferir o layout antes de gastar uma geração.
-3. `compile --target prose|json|regions` e envie ao modelo de imagem.
-4. `eval-form`, responda olhando a imagem, `eval-apply`, recompile, gere de novo.
+| `validate CENA [--json]` | Valida tudo numa passada, com caminho, valores aceitos e "você quis dizer…". |
+| `compile CENA --target prose\|json\|regions [--pass black\|white]` | Compila a cena. Negações viram afirmações. |
+| `check CENA` | Avalia os asserts de layout (sem imagem). |
+| `render CENA --out F.png` | Esquema 2D: grade, caixas, orientação, guias, olhar, foco. |
+| `plan CENA` / `plan-apply CENA PROPOSTA` | Pedido estruturado ao modelo (cores e guias) e gravação da proposta, já validada. |
+| `verify CENA IMAGEM` | Mede a imagem: cores, grade de pixels, simetria, guias, paleta, fundo, vazamento. |
+| `cutout CENA IMAGEM --out F.png` / `cutout --black B --white W --out F.png` | PNG com alfa (por chave ou por diferença de duas passadas). |
+| `sweep CENA --axis caminho=v1,v2,v3 --out DIR` / `sweep-score FICHA` | Variantes que mudam um eixo só; mede se a imagem seguiu a ordem. |
+| `eval-form` / `eval-apply [--lock-passed]` | Ficha de avaliação, reforço do que falhou e trava do que passou. |
 
 ## Regras importantes
 
-- **Direções são do ponto de vista de quem vê a imagem** (`left` = esquerda da tela). O teste 3 mostrou que "esquerda/direita" sem esse referencial é ambíguo: a lança subiu para cima e à direita e foi pontuada como `up_left`.
+- Direções são do ponto de vista de quem vê a imagem (`left` = esquerda da tela), inclusive o vento.
 - Coordenadas normalizadas: x para a direita, y para baixo, `[0,1]`.
-- Grade áurea: linhas em 0,381966 e 0,618034. Regiões 3×3 e 4 pontos de interesse (`pt_ul`, `pt_ur`, `pt_ll`, `pt_lr`).
-- Formas de quadro: `rect`, `circle`, `ellipse` (centro e visibilidade são testados contra a forma).
-- Tamanhos em pixels são múltiplos de 8 (16:9 → 1344×752).
+- Pontos de interesse da grade saem com porcentagens ("a cerca de 38% da esquerda e 38% do topo"), porque os modelos leram "superior esquerdo da grade" como o canto do quadro.
+- Foco único: só um elemento com `brightness: max`; só um ponto com detalhe `max`.
+- CMYK → RGB é aproximado (sem perfil ICC); a cor impressa real depende do perfil.
+- Elementos translúcidos (vidro, fumaça, brilho) recortam mal por chave; use `alpha: difference`.
 - `eval-apply` regrava o YAML sem os comentários originais.
-- Só um elemento pode ter `brightness: max` (foco único); `saturation: max` só no foco.
+- Os verificadores de imagem exigem Pillow e numpy (`pip install scenelang[image]`).
 
-## Asserts
+## Exemplos
 
-`above`, `below`, `left_of`, `right_of`, `inside`, `near` (tol. 0,06 da altura do quadro), `count`, `visible`, `facing`, `brightest`, `focal_single`.
+- `examples/guardia.yaml` — splash art 16:9, grade áurea, 11 asserts.
+- `examples/emblema.yaml` — quadro circular, grade de terços, `count` com glossário.
+- `examples/pixel_heroi.yaml` — pixel art 32×32 com paleta escolhida pelo modelo, guias, chromakey, vento, materiais e 7 verificadores.
+- `examples/pixel_heroi_noite.yaml` — variante por `extends` + biblioteca de materiais + travas.
 
-## Desenvolvimento
+## Status
 
-```
-pip install -e .[dev]
-pytest
-```
-
-Fora do escopo desta versão (fases seguintes): camadas/alfa, crítico automático, previz/Blender via MCP, adaptação para uso por LLMs (MCP), publicação no GitHub.
+Versão 0.2 (experimental). Fora desta versão: camadas separadas e crítico automático por visão, previz 3D (Blender via MCP), adaptação para uso por LLMs (MCP), mais idiomas. A linguagem é neutra quanto a fornecedor e não contém mecanismos para contornar políticas de uso de modelos.

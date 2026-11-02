@@ -1,0 +1,12 @@
+# Resposta de um modelo ao pedido `scenelang plan examples/pixel_heroi.yaml`.
+palette:
+  main: [230, 120, 40]
+  gold: [240, 190, 60]
+  brown: [120, 70, 40]
+guides:
+  head_top: 0.08
+  chin: 0.29
+  shoulder: 0.3425
+  waist: 0.542
+  knee: 0.735
+  baseline: 0.92

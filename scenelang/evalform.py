@@ -48,13 +48,14 @@ def build_form(scene: Scene, rodada: int = 1) -> str:
     return header + body
 
 
-def apply_answers(scene: Scene, answers_text: str) -> tuple[dict, list[dict]]:
+def apply_answers(scene: Scene, answers_text: str, lock_passed: bool = False) -> tuple[dict, list[dict]]:
     """Retorna (cena atualizada como dicionário, relatório dos itens reprovados)."""
     form = yaml.safe_load(answers_text) or {}
     asserts = scene.data.get("asserts", [])
     new = copy.deepcopy(scene.data)
     boost = list(new.get("priority_boost", []))
     failed: list[dict] = []
+    passed: list[str] = []
     unanswered = 0
     for item in form.get("itens", []):
         raw = item.get("assert")
@@ -66,6 +67,7 @@ def apply_answers(scene: Scene, answers_text: str) -> tuple[dict, list[dict]]:
             continue
         word = str(ok).strip().lower()
         if word in YES or ok is True:
+            passed.append(raw)
             continue
         if word in NO or ok is False:
             tag = item.get("tag")
@@ -79,6 +81,19 @@ def apply_answers(scene: Scene, answers_text: str) -> tuple[dict, list[dict]]:
         raise ValueError(f"resposta inválida em {raw!r}: {ok!r} (use sim ou nao)")
     if failed:
         new["priority_boost"] = boost
+    if lock_passed:
+        failed_raw = {f["assert"] for f in failed}
+        locked = list(new.get("lock", []))
+        for raw in passed:
+            for arg in parse_assert(raw).args:
+                name = arg.split(".")[0]
+                if name in scene.by_id and name not in locked and raw not in failed_raw:
+                    locked.append(name)
+        # o que falhou não pode ficar travado
+        failed_names = {arg.split(".")[0] for raw in failed_raw for arg in parse_assert(raw).args}
+        locked = [n for n in locked if n not in failed_names]
+        if locked:
+            new["lock"] = locked
     hist = list(new.get("history", []))
     hist.append({"rodada": form.get("rodada", len(hist) + 1),
                  "reprovados": [f["assert"] for f in failed],

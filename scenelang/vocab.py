@@ -138,3 +138,17 @@ PREDICATES = (
 REJECTION_TAGS = ("direção", "luz", "proporção", "estilo", "anatomia", "enquadramento")
 
 SPIRAL_DIRECTIONS = ("cw", "ccw")
+
+
+# Partes de objetos citadas em materials/wind_parts (inglês → português); nomes desconhecidos passam como estão.
+PART_PT = {
+    "cape": "a capa", "cloak": "o manto", "hair": "o cabelo", "flag": "a bandeira", "banner": "o estandarte",
+    "armor": "a armadura", "sword": "a espada", "scarf": "o cachecol", "skirt": "a saia", "grass": "a grama",
+    "sail": "a vela", "tail": "a cauda", "mane": "a juba", "fur": "o pelo", "cloth": "o tecido",
+    "plume": "a pluma", "ribbon": "a fita", "hood": "o capuz", "shield": "o escudo", "helmet": "o elmo",
+    "skin": "a pele", "boots": "as botas", "gloves": "as luvas", "staff": "o cajado", "spear": "a lança",
+}
+
+
+def part_pt(name: str) -> str:
+    return PART_PT.get(name, name)

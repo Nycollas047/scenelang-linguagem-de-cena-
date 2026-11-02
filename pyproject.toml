@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scenelang"
-version = "0.1.0"
+version = "0.2.0"
 description = "Linguagem de cena para modelos de geração de imagem: cena (YAML) -> validação -> prompt compilado -> verificação"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+image = ["pillow>=10", "numpy>=1.26"]
+dev = ["pytest", "pillow>=10", "numpy>=1.26"]
 
 [project.scripts]
 scenelang = "scenelang.cli:main"

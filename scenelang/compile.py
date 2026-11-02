@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 
+from . import fx, guides, materials
 from . import layout as L
+from . import palette as PAL
 from . import phrases as P
 from . import vocab as V
 from .assertions import parse_assert
@@ -21,6 +23,9 @@ KIND_PT = {
     "character": "personagem", "creature": "criatura", "prop": "objeto", "structure": "estrutura",
     "terrain": "terreno", "sky": "céu", "effect": "efeito", "light_source": "fonte de luz", "vehicle": "veículo",
 }
+LOCK_PT = {"palette": "a paleta de cores", "style": "o estilo", "camera": "a câmera e o enquadramento",
+           "lights": "a iluminação", "guides": "as proporções", "atmosphere": "a atmosfera", "background": "o fundo",
+           "materials": "os materiais e texturas"}
 WEIGHT = {"low": 0.6, "normal": 1.0, "high": 1.2, "max": 1.5}
 
 
@@ -62,6 +67,9 @@ def entity_sentence(scene: Scene, e: Entity) -> str:
     elif e.brightness == "low" or e.saturation == "muted":
         parts.append("Permanece discreto: baixa saturação e brilho contido.")
     parts.extend(f"{d}." if not d.endswith(".") else d for d in e.details)
+    for extra in (materials.entity_sentence(scene, e.id), fx.wind_sentence(scene, e.id)):
+        if extra:
+            parts.append(extra)
     return " ".join(parts)
 
 
@@ -110,6 +118,9 @@ def palette_sentence(scene: Scene) -> str | None:
         use = f", usado {pal['accent_use']}" if pal.get("accent_use") else ""
         bits.append(f"acento {pal['accent']}{use}")
     bits.extend(pal.get("notes", []))
+    extra = PAL.sentence(scene.data)
+    if extra:
+        bits.append(extra)
     return "; ".join(bits) + "." if bits else None
 
 
@@ -136,7 +147,7 @@ def avoid_affirmations(scene: Scene) -> list[str]:
     return out
 
 
-def build_ir(scene: Scene) -> dict:
+def build_ir(scene: Scene, passname: str | None = None) -> dict:
     d = scene.data
     prios, reminders = priorities(scene)
     style = d["style"]
@@ -149,6 +160,8 @@ def build_ir(scene: Scene) -> dict:
         "quadro": canvas_sentence(scene),
         "grade": grid_sentence(scene),
     }
+    for key, text in guides.sections(scene).items():
+        ir[key] = text
     intent = d["intent"]
     if intent.get("emotion") or intent.get("story"):
         ir["intencao"] = " ".join(
@@ -175,6 +188,18 @@ def build_ir(scene: Scene) -> dict:
     details = list(d.get("details", [])) + avoid_affirmations(scene)
     if details:
         ir["detalhes"] = details
+    atm = fx.atmosphere_section(scene)
+    if atm:
+        ir["atmosfera"] = atm
+    det = materials.detail_section(scene)
+    if det:
+        ir["detalhe_de_textura"] = det
+    bg = fx.background_section(scene, passname)
+    if bg:
+        ir["fundo"] = bg
+    if d.get("lock"):
+        names = [scene.by_id[n].label if n in scene.by_id else LOCK_PT.get(n, n) for n in d["lock"]]
+        ir["manter_igual"] = "Mantenha exatamente igual à versão anterior: " + "; ".join(names) + "."
     if d.get("finish"):
         ir["acabamento"] = d["finish"]
     if reminders:
@@ -183,12 +208,18 @@ def build_ir(scene: Scene) -> dict:
 
 
 # ---------------------------------------------------------------------------
-def to_prose(scene: Scene) -> str:
-    ir = build_ir(scene)
-    lines = [f"Ilustração: {ir['estilo']}. {ir['quadro']} {ir['grade']}", "", "PRIORIDADES (cumpra primeiro):"]
+def to_prose(scene: Scene, passname: str | None = None) -> str:
+    ir = build_ir(scene, passname)
+    head = f"Ilustração: {ir['estilo']}. {ir['quadro']} {ir['grade']}"
+    for k in ("pixel", "guias"):
+        if k in ir:
+            head += " " + ir[k]
+    lines = [head, "", "PRIORIDADES (cumpra primeiro):"]
     lines += [f"{i}. {t}" for i, t in enumerate(ir["prioridades"], 1)]
     if "intencao" in ir:
         lines += ["", "INTENÇÃO: " + ir["intencao"]]
+    if "atmosfera" in ir:
+        lines += ["", "ATMOSFERA: " + ir["atmosfera"]]
     lines += ["", "CENA:"]
     for plane, sentences in ir["planos"].items():
         lines.append(f"{V.PLANE_PT[plane]}:")
@@ -197,34 +228,40 @@ def to_prose(scene: Scene) -> str:
         lines += ["", "ILUMINAÇÃO:"] + [f"- {s}" for s in ir["iluminacao"]]
     if "camera" in ir:
         lines += ["", "CÂMERA: " + ir["camera"]]
+    if "detalhe_de_textura" in ir:
+        lines += ["", "DETALHE E TEXTURA: " + ir["detalhe_de_textura"]]
     if "paleta" in ir:
         lines += ["", "PALETA: " + ir["paleta"]]
     if "ordem_do_olhar" in ir:
         lines += ["", "ORDEM DO OLHAR: " + " → ".join(f"{i}) {t}" for i, t in enumerate(ir["ordem_do_olhar"], 1)) + "."]
     if "detalhes" in ir:
         lines += ["", "DETALHES: " + "; ".join(ir["detalhes"]) + "."]
+    if "fundo" in ir:
+        lines += ["", "FUNDO: " + ir["fundo"]]
     if "acabamento" in ir:
         lines += ["", "ACABAMENTO: " + ir["acabamento"] + "."]
+    if "manter_igual" in ir:
+        lines += ["", "TRAVAS: " + ir["manter_igual"]]
     if "lembrete_final" in ir:
         lines += ["", "LEMBRETE FINAL (crítico):"] + [f"- {t}" for t in ir["lembrete_final"]]
     return "\n".join(lines) + "\n"
 
 
-def to_json(scene: Scene) -> str:
-    ir = build_ir(scene)
+def to_json(scene: Scene, passname: str | None = None) -> str:
+    ir = build_ir(scene, passname)
     out = {"prioridade_maxima": ir["prioridades"]}
     out.update({k: v for k, v in ir.items() if k != "prioridades"})
     return json.dumps(out, ensure_ascii=False, indent=2) + "\n"
 
 
-def to_regions(scene: Scene, size: str | None = None) -> str:
+def to_regions(scene: Scene, size: str | None = None, passname: str | None = None) -> str:
     w_px, h_px = L.size_px(scene.ratio, size)
     d = scene.data
-    ir = build_ir(scene)
+    ir = build_ir(scene, passname)
     style = d["style"]
     weights = {k: float(v) / 100.0 for k, v in (style.get("mix") or {}).items()}
     global_bits = [ir["estilo"], ir["quadro"], ir["grade"]]
-    for key in ("paleta", "camera"):
+    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera"):
         if key in ir:
             global_bits.append(ir[key])
     regions = []

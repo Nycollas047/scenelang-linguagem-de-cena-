@@ -1,0 +1,92 @@
+# Personagem de jogo em pixel art, pronto para recorte (chromakey) e com guias de proporção.
+scene: "Cavaleira da Lua (sprite)"
+version: 1
+
+canvas: {shape: rect, ratio: "1:1", pixel_grid: 32}
+grid: {kind: thirds}
+
+style:
+  base: "pixel art 16 bits de personagem de jogo, contorno de 1 pixel"
+  mix:
+    "pixel art 16 bits": 85
+    "sprite de RPG clássico": 15
+
+intent:
+  emotion: "determinação tranquila"
+  story: "uma cavaleira de capa azul parada, pronta para a aventura"
+  focal: knight.face
+
+colors:
+  ink: "#1b1b26"
+  steel: {rgb: [160, 170, 190]}
+
+palette:
+  mode: model_picks
+  space: rgb
+  count: 5
+  harmony: analogous
+  colors:
+    outline: "@ink"
+    skin: {cmyk: [0, 30, 45, 0]}
+  constraints: {contrast_min: 4.5, min_distance: 12, max_colors: 16}
+
+guides:
+  mode: model_proposes
+  subject: knight
+  canon: {heads_tall: 4}
+  axis: {symmetry: vertical, x: 0.5}
+  lines: [head_top, chin, shoulder, waist, knee, baseline]
+  margin: 2
+
+background:
+  mode: chromakey
+  key: auto
+  alpha: chroma
+  tolerance: 12
+  edge: hard
+  rules: [no_spill, no_shadow_on_key, no_gradient, subject_inside_frame]
+
+atmosphere:
+  mood: {name: serene, level: normal}
+  weather: clear
+  wind: {direction: right, strength: normal}
+
+materials:
+  aco_polido: {base: metal, finish: polished, wear: low, detail_scale: fine, sheen: high, color: "@steel"}
+  capa_lona: {base: cloth, finish: matte, wear: normal, detail_scale: medium}
+
+detail:
+  focal: max
+  foreground: normal
+  background: low
+
+camera: {angle: eye, lens: normal, focus: [knight.face]}
+
+entities:
+  - id: knight
+    kind: character
+    label: "a cavaleira"
+    desc: "cavaleira de corpo inteiro, de frente, armadura de aço com detalhes azuis, capa azul, espada curta na bainha"
+    plane: foreground
+    box: [0.25, 0.08, 0.5, 0.84]
+    brightness: max
+    saturation: normal
+    parts: {armor: aco_polido, cape: capa_lona}
+    wind_parts: [cape]
+    tags: [focal]
+
+asserts:
+  - visible(knight)
+  - focal_single
+  - above(knight.face, knight.feet)
+
+verify:
+  - max_colors(16)
+  - grid_aligned(32)
+  - symmetric(vertical, 0.8)
+  - fit_guides(0.04)
+  - palette_match(10)
+  - chroma_clean()
+  - no_spill()
+
+finish: "silhueta legível e limpa, sem texto"

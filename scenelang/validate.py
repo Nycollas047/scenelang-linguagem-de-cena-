@@ -17,21 +17,27 @@ from . import layout as L
 from . import vocab as V
 from .assertions import AssertSyntaxError, check_refs, parse_assert
 from .model import SLUG, Diagnostic, RefError, Scene, build_scene
+from . import fx, guides, materials, palette as pal_layer
+from . import variants
+from . import verify as verify_mod
 from .negations import to_affirmation
 
 TOP_KEYS = {
     "scene", "version", "canvas", "grid", "style", "intent", "camera", "palette",
     "lights", "entities", "gaze", "asserts", "details", "finish", "glossary",
     "avoid", "priority_boost", "history",
+    "colors", "guides", "background", "atmosphere", "materials", "detail", "verify", "lock", "extends", "import",
 }
 REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
 ENTITY_KEYS = {
     "id", "kind", "label", "desc", "plane", "at", "size", "box", "orient",
     "brightness", "saturation", "tags", "details",
+    "wind_parts", "translucent", "material", "parts", "detail",
 }
 LIGHT_KEYS = {"role", "color", "source", "hits", "note"}
 CAMERA_KEYS = {"angle", "lens", "focus", "depth_blur"}
-PALETTE_KEYS = {"dominant", "accent", "accent_use", "notes"}
+PALETTE_KEYS = {"dominant", "accent", "accent_use", "notes", "mode", "space", "count", "harmony", "colors", "constraints", "proposal"}
+LOCKABLE = {"palette", "style", "camera", "lights", "guides", "atmosphere", "background", "materials"}
 RESERVED_IDS = set(V.POINT_NAMES) | set(L.region_names()) | {"canvas"}
 
 
@@ -51,31 +57,10 @@ class _Collector:
         return any(d.level == "error" for d in self.items)
 
 
-def _suggest(got, options) -> str | None:
-    m = difflib.get_close_matches(str(got), [str(o) for o in options], n=1, cutoff=0.6)
-    return f"você quis dizer {m[0]!r}?" if m else None
-
-
-def _enum(c: _Collector, path: str, value, options, required: bool = True) -> bool:
-    if value is None:
-        if required:
-            c.error(path, "campo obrigatório ausente", accepted=list(options))
-        return False
-    if value not in options:
-        c.error(path, "valor fora do vocabulário fechado", got=value, accepted=list(options), hint=_suggest(value, options))
-        return False
-    return True
-
-
-def _is_num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
-
-
-def _str_list(c: _Collector, path: str, v) -> list[str]:
-    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
-        c.error(path, "deve ser uma lista de textos", got=v)
-        return []
-    return v
+from .checks import enum_check as _enum  # noqa: E402
+from .checks import is_num as _is_num  # noqa: E402
+from .checks import str_list as _str_list  # noqa: E402
+from .checks import suggest as _suggest  # noqa: E402
 
 
 def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
@@ -220,6 +205,13 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
     _check_gaze(c, data, scene)
     _check_asserts(c, data, scene)
     _check_misc(c, data)
+    pal_layer.check(c, data)
+    guides.check(c, data, scene)
+    fx.check_background(c, data, scene)
+    fx.check_atmosphere(c, data, scene)
+    materials.check(c, data)
+    _check_lock(c, data, scene)
+    verify_mod.check(c, data)
 
     return c.items, (scene if not c.has_errors else None)
 
@@ -440,15 +432,32 @@ def _check_misc(c: _Collector, data: dict) -> None:
         c.warn("$.asserts", "sem asserts não há como verificar a cena")
 
 
+def _check_lock(c: _Collector, data: dict, scene: Scene | None) -> None:
+    lock = data.get("lock")
+    if lock is None:
+        return
+    if not isinstance(lock, list) or not all(isinstance(x, str) for x in lock):
+        c.error("$.lock", "deve ser uma lista de textos", got=lock)
+        return
+    valid = set(LOCKABLE) | (set(scene.by_id) if scene is not None else set())
+    for i, name in enumerate(lock):
+        if scene is not None and name not in valid:
+            c.error(f"$.lock[{i}]", "nada com esse nome para travar", got=name, accepted=sorted(valid), hint=_suggest(name, valid))
+
+
 def load_file(path: str | Path) -> tuple[list[Diagnostic], Scene | None, dict | None]:
-    text = Path(path).read_text(encoding="utf-8")
-    return load_text(text)
+    path = Path(path)
+    return load_text(path.read_text(encoding="utf-8"), base_dir=path.resolve().parent)
 
 
-def load_text(text: str) -> tuple[list[Diagnostic], Scene | None, dict | None]:
+def load_text(text: str, base_dir: str | Path | None = None) -> tuple[list[Diagnostic], Scene | None, dict | None]:
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as e:
         return [Diagnostic("error", "$", f"YAML inválido: {e}")], None, None
+    try:
+        data = variants.resolve(data, Path(base_dir) if base_dir else None)
+    except variants.VariantError as e:
+        return [Diagnostic("error", "$.extends", str(e))], None, None
     diags, scene = validate_data(data)
     return diags, scene, data

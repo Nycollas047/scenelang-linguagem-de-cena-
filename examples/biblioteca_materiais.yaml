@@ -1,0 +1,6 @@
+# Biblioteca reutilizável: materiais e cores nomeadas.
+colors:
+  bronze: {rgb: [160, 110, 50]}
+materials:
+  bronze_gasto: {base: metal, finish: scratched, wear: high, detail_scale: fine, sheen: normal, color: "@bronze"}
+  couro_velho: {base: leather, finish: rough, wear: high, detail_scale: medium}

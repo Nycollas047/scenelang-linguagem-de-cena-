@@ -11,6 +11,7 @@ import subprocess
 from html import escape
 from pathlib import Path
 
+from . import guides as G
 from . import layout as L
 from . import vocab as V
 from .assertions import evaluate_all, parse_assert
@@ -78,6 +79,10 @@ def render_svg(scene: Scene, width: int = 960) -> str:
     for name in V.POINT_NAMES:
         x, y = L.point_xy(scene.grid_kind, name)
         o.append(f'<path d="M{px(x) - 5:.1f} {py(y):.1f}H{px(x) + 5:.1f}M{px(x):.1f} {py(y) - 5:.1f}V{py(y) + 5:.1f}" stroke="#9aa3b2" stroke-width="1.5"/>')
+
+    o.append('<g clip-path="url(#frame)">')
+    o.extend(G.svg(scene, px, py, ox, W, H))
+    o.append('</g>')
 
     # entidades, do fundo para a frente
     for plane in V.PLANES:

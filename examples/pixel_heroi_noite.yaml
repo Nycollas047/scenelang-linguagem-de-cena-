@@ -1,0 +1,13 @@
+# Variante da cavaleira à noite: herda tudo e muda só o clima, o material da armadura e a trava.
+extends: pixel_heroi.yaml
+import: [biblioteca_materiais.yaml]
+scene: "Cavaleira da Lua (noite)"
+atmosphere:
+  mood: {name: mysterious, level: high}
+  weather: fog
+  wind: {direction: right, strength: low}
+entities:
+  - id: knight
+    desc: "cavaleira de corpo inteiro, de frente, armadura de bronze com detalhes azuis, capa azul, espada curta na bainha"
+    parts: {armor: bronze_gasto}
+lock: [knight, camera]
