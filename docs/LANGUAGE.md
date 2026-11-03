@@ -1,4 +1,4 @@
-# Referência rápida da linguagem (v0.2)
+# Referência rápida da linguagem (v0.3)
 
 ## Estrutura de uma cena
 
@@ -16,7 +16,7 @@
 | `atmosphere` | `mood {name, level}`, `weather`, `wind {direction, strength}` |
 | `materials`, `detail` | biblioteca de materiais; orçamento de detalhe por zona |
 | `camera`, `lights`, `gaze` | enquadramento, luz, ordem do olhar |
-| `entities` | `id`, `kind`, `plane`, `label`, `desc`, `box` ou `at`+`size`, `orient`, `brightness`, `saturation`, `tags`, `material`, `parts`, `detail`, `wind_parts`, `translucent` |
+| `entities` | `id`, `kind`, `plane`, `label`, `desc`, `box` ou `at`+`size`, `orient`, `brightness`, `saturation`, `tags`, `character`, `material`, `parts`, `detail`, `wind_parts`, `translucent` |
 | `asserts` | condições de layout (sem imagem) |
 | `verify` | medições na imagem gerada |
 | `lock` | partes a manter iguais à versão anterior |
@@ -34,7 +34,7 @@ Harmonias: monochromatic, analogous, complementary, triadic, free.
 - **Cânones de proporção:** chibi (2), stylized (4), child (5), realistic (7,5), heroic (8) ou `{heads_tall: N}`
 - **Linhas-guia:** head_top, eye, chin, shoulder, waist, knee, baseline
 - **Moods:** serene, tense, melancholic, epic, mysterious, joyful, ominous, cozy · **clima:** clear, rain, snow, fog, storm, dust · **vento:** calm, low, normal, high, max
-- **Materiais (base):** metal, stone, cloth, leather, skin, wood, glass, water, crystal, fur, paper, bone · **acabamento:** polished, matte, scratched, oxidized, wet, rough, glossy, mossy, dusty
+- **Materiais (base):** metal, stone, cloth, leather, skin, wood, glass, water, crystal, fur, paper, bone, scales, feathers, chitin, shell, rubber, plastic, ceramic, wool · **acabamento:** polished, matte, scratched, oxidized, wet, rough, glossy, mossy, dusty
 - **Regras de fundo:** no_spill, no_shadow_on_key, no_gradient, subject_inside_frame
 
 ## Asserts (layout) e verify (imagem)
@@ -47,3 +47,41 @@ Harmonias: monochromatic, analogous, complementary, triadic, free.
 1. `scenelang plan cena.yaml` → JSON com o que o modelo deve responder (cores faltantes, linhas, regras).
 2. O modelo responde um YAML: `palette: {papel: [valores]}` e/ou `guides: {linha: y}`.
 3. `scenelang plan-apply cena.yaml proposta.yaml` valida (harmonia, contraste, cânone) e grava.
+
+## Personagem (`entities[].character`)
+
+Atributos descritivos e independentes. Nada é deduzido de `heritage` (texto livre do autor, até 80 caracteres).
+
+| Campo | Valores |
+|---|---|
+| `age_group` | child, teen, young_adult, adult, middle_aged, elder |
+| `skin` | `tone` 1–10 (escala Monk, cor de referência embutida) ou `color` exata; `undertone` cool/neutral/warm/olive; `finish` matte/dewy/weathered/smooth; `marks` freckles, moles, scars, vitiligo, birthmark, wrinkles, tattoos, blush, sun_spots |
+| `hair` | `texture` straight/wavy/curly/coily, `length` bald…very_long, `density`, `color`, `style` (texto) |
+| `facial_hair` | `type` beard/mustache/stubble/goatee/sideburns/beard_and_mustache, `length`, `color`, `style` |
+| `eyes`, `face` | cor e formato dos olhos; formato do rosto, nariz, lábios, mandíbula |
+| `body` | `build`, `height`, `shoulders`, `waist`, `hips`, `limbs`, `posture`, `proportion` (chibi/stylized/realistic/heroic, avisa se destoa de `guides.canon`) |
+| `features` | parte (ears, horns, tail, wings, claws…) → texto livre |
+
+A cor da pele entra nas cores de referência da escolha automática da chave do fundo.
+
+## Tecidos e escamas (em `material`, `parts` ou `materials`)
+
+- Tecido: `fabric` (cotton, linen, silk, satin, wool, velvet, denim, lace, canvas, tulle, leather, burlap, chiffon, felt, tweed, corduroy, suede, fleece, knit, mesh), `weave` (plain, twill, checked, striped, herringbone, polka, floral, embroidered, brocade, quilted, pleated, ribbed, patched), `drape` (stiff, structured, flowing, heavy, clingy, billowing, tattered). `base: cloth` é implícito.
+- Escamas: `scales: {pattern, size, edge, sheen, gradient {from,to}, color, coverage}`. `pattern`: overlapping, hexagonal, diamond, plate, granular, keeled, rounded; `size`: tiny…huge; `edge`: smooth, serrated, spiked, rough. `base: scales` é implícito; `coverage` limita às partes citadas.
+- Avisos de contradição: lona (canvas) com caimento fluido, granular grande, caimento rígido em peça movida pelo vento.
+
+## Uso por modelos de linguagem
+
+| Comando | Para quê |
+|---|---|
+| `primer` | cartilha de uma página gerada do vocabulário |
+| `vocab [--json]` | todos os vocabulários fechados |
+| `new [modelo] [--out F]` | cena inicial: sprite, splash, emblem, character-sheet |
+| `validate --fix [--out F]` | aplica correções seguras (typo de valor ou de campo, com `fix` no diagnóstico) |
+
+Formas curtas aceitas (e registradas em `defaults_applied` na API): `canvas: "16:9"`, `style: "texto"`, `grid` ausente (golden), `pixel_grid: "64x64"`, `label` ausente (vem do id), `atmosphere.mood: epic`, `verify: [grid_aligned]`, apelidos em português (`kind: personagem`, `plane: fundo`, `grid: terços`), `chroma_key`, `sheen: strong`, campos de `character` soltos na entidade.
+`scenelang.api` oferece `validate`, `fix`, `compile_scene`, `plan`, `primer`, `vocab`, `new` com retorno JSON-serializável.
+
+## Medir e pós-processar (v0.3)
+
+`snap` (grade real, limite de cores, paleta exata, encaixe nas guias, fundo transparente), `sheet-prompt`/`sheet-measure` (variantes lado a lado, medidas por coluna), `verify symmetric(vertical, 0.8, legs)` (só pernas, ignora capa/cabelo ao vento) e avisos de contradição (paleta × descrição, simetria × vento, margem × sujeito).

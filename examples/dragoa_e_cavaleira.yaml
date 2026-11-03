@@ -1,0 +1,47 @@
+scene: "Vigília da Dragoa"
+canvas: {ratio: "16:9"}
+style: "splash art épico de fantasia sombria, pintura digital com luz dramática"
+intent:
+  emotion: "épico, tenso, solene"
+  story: "dragoa e cavaleira num penhasco observam uma cidade pequena ao longe durante a tempestade"
+  focal: dragon.head
+atmosphere: {mood: epic, weather: storm, wind: {direction: right, strength: high}}
+asserts: ["left_of(dragon, town)", "visible(dragon)", "visible(rider)", "focal_single"]
+entities:
+  - id: dragon
+    kind: creature
+    desc: "dragoa de escamas verde-escuras, com degradê para dourado nas costas e na cauda, escamas sobrepostas médias com brilho forte, empoleirada no penhasco e olhando para a direita"
+    plane: midground
+    box: [0.02, 0.22, 0.55, 0.52]
+    orient: right
+    brightness: max
+    parts:
+      scales: {base: scales, pattern: overlapping, sheen: high, detail_scale: medium}
+  - id: rider
+    kind: character
+    desc: "cavaleira ao lado da dragoa, de pé no penhasco, com capa de lã pesada que balança ao vento"
+    plane: midground
+    box: [0.44, 0.38, 0.16, 0.56]
+    orient: right
+    character:
+      age_group: adult
+      skin: {tone: 8, undertone: warm}
+      hair: {texture: coily, length: short}
+      body: {build: athletic}
+    parts:
+      fabric: {fabric: wool, drape: heavy}
+  - id: cliff
+    kind: terrain
+    desc: "penhasco rochoso à esquerda, em primeiro plano"
+    plane: foreground
+    box: [0.0, 0.7, 0.5, 0.3]
+  - id: town
+    kind: structure
+    desc: "cidade pequena ao longe, com poucas luzes"
+    plane: background
+    box: [0.62, 0.66, 0.3, 0.14]
+  - id: sky
+    kind: sky
+    desc: "céu de noite tempestuosa, com nuvens pesadas"
+    plane: background
+    box: [0.0, 0.0, 1.0, 0.7]

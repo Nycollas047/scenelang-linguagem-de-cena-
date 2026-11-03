@@ -21,6 +21,7 @@ class Diagnostic:
     got: object = None
     accepted: list | None = None
     hint: str | None = None
+    fix: dict | None = None      # correção aplicável por máquina: {path, value} ou {path, rename}
 
     def to_dict(self) -> dict:
         d = {"level": self.level, "path": self.path, "message": self.message}
@@ -30,6 +31,8 @@ class Diagnostic:
             d["accepted"] = self.accepted
         if self.hint:
             d["hint"] = self.hint
+        if self.fix:
+            d["fix"] = self.fix
         return d
 
     def __str__(self) -> str:

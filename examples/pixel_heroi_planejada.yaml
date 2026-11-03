@@ -26,7 +26,7 @@ palette:
   mode: model_picks
   space: rgb
   count: 5
-  harmony: analogous
+  harmony: complementary
   colors:
     outline: '@ink'
     skin:
@@ -42,19 +42,19 @@ palette:
   proposal:
     main:
       rgb:
-      - 230
-      - 120
       - 40
-    gold:
+      - 90
+      - 210
+    navy:
       rgb:
-      - 240
+      - 20
+      - 35
+      - 90
+    steel:
+      rgb:
+      - 160
+      - 170
       - 190
-      - 60
-    brown:
-      rgb:
-      - 120
-      - 70
-      - 40
 guides:
   mode: model_proposes
   subject: knight
@@ -147,7 +147,7 @@ asserts:
 verify:
 - max_colors(16)
 - grid_aligned(32)
-- symmetric(vertical, 0.8)
+- symmetric(vertical, 0.8, legs)
 - fit_guides(0.04)
 - palette_match(10)
 - chroma_clean()

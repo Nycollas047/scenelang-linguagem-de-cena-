@@ -122,12 +122,13 @@ def contrast_ratio(a, b) -> float:
 NAMES_PT: dict[str, tuple[int, int, int]] = {
     "preto": (20, 20, 24), "branco": (245, 245, 240), "cinza": (128, 128, 128), "prata": (192, 196, 204),
     "vermelho": (200, 30, 40), "vinho": (110, 20, 40), "laranja": (240, 130, 30), "amarelo": (245, 215, 50),
-    "dourado": (212, 165, 40), "bronze": (160, 110, 50), "marrom": (110, 70, 40), "bege": (225, 205, 170),
+    "dourado": (212, 165, 40), "bronze": (160, 110, 50), "marrom": (110, 70, 40), "castanho": (105, 68, 40), "bege": (225, 205, 170),
     "creme": (250, 240, 215), "rosa": (240, 140, 170), "magenta": (220, 30, 150), "roxo": (110, 40, 150),
     "violeta": (140, 90, 200), "lilás": (190, 160, 220), "índigo": (60, 40, 130), "azul-marinho": (20, 35, 90),
     "azul-noite": (20, 30, 80), "azul": (40, 90, 210), "azul-claro": (130, 190, 240), "ciano": (40, 200, 220),
     "turquesa": (30, 190, 180), "verde": (50, 160, 70), "verde-escuro": (20, 80, 45), "verde-limão": (160, 220, 60),
-    "verde-oliva": (110, 120, 50), "salmão": (245, 150, 130),
+    "verde-oliva": (110, 120, 50), "salmão": (245, 150, 130), "grisalho": (155, 155, 160), "loiro": (225, 190, 110), "ruivo": (170, 75, 35),
+    "castanho-escuro": (60, 40, 30), "platinado": (235, 232, 220),
 }
 
 

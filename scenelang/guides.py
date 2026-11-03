@@ -72,8 +72,12 @@ def check(c, data: dict, scene) -> None:
     if "canon" in g:
         heads = heads_of(g["canon"])
         if heads is None:
-            c.error("$.guides.canon", "cânone inválido", got=g["canon"],
-                    accepted=sorted(CANONS) + ["{heads_tall: 1.5–10}"])
+            from .checks import closest, suggest
+
+            near = closest(g["canon"], CANONS) if isinstance(g["canon"], str) else None
+            c.error("$.guides.canon", "cânone inválido", got=g["canon"], accepted=sorted(CANONS) + ["{heads_tall: 1.5–10}"],
+                    hint=suggest(g["canon"], CANONS) if isinstance(g["canon"], str) else None,
+                    fix={"path": "$.guides.canon", "value": near} if near else None)
     if "axis" in g:
         ax = g["axis"]
         if not isinstance(ax, dict):
@@ -189,13 +193,19 @@ def sections(scene) -> dict[str, str]:
     heads = heads_of(g.get("canon", "stylized")) if "canon" in g else None
     if heads:
         bits.append(f"personagem com {heads:g} cabeças de altura (a cabeça mede {100 / heads:.0f}% da altura do corpo)")
-    if lines:
+    if lines and cells:
+        rows = ", ".join(f"{LINE_PT[n]} na linha {min(cells[1], round(y * cells[1]) + (1 if n == 'baseline' else 0))}"
+                         for n, y in lines.items())
+        bits.append(f"linhas da grade (de 1 a {cells[1]}, contando do topo): {rows}")
+    elif lines:
         _, y0, _, h = subject_box(scene)
         pct = ", ".join(f"{LINE_PT[n]} a {round((y - y0) / h * 100)}%" for n, y in lines.items() if n not in ("head_top", "baseline"))
         if pct:
             bits.append("medidas a partir do topo do personagem: " + pct)
     if axis_x(scene) is not None:
-        bits.append("corpo simétrico em torno do eixo vertical central")
+        windy = any(isinstance(e, dict) and e.get("wind_parts") for e in scene.data.get("entities", []))
+        bits.append("corpo, tronco e pernas simétricos em torno do eixo vertical central"
+                    + (" (capa, cabelo e partes leves ao vento ficam de fora da simetria)" if windy else ""))
     if g.get("margin") and cells:
         bits.append(f"margem de {g['margin']} células vazias em volta do personagem")
     if bits:

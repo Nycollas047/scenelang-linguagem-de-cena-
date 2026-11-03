@@ -26,6 +26,22 @@ def _load(path: str, *, strict: bool = True):
 
 
 def cmd_validate(a) -> int:
+    if a.fix:
+        from . import api
+
+        text = Path(a.scene).read_text(encoding="utf-8")
+        res = api.fix(text)
+        for line in res["applied"]:
+            print(f"corrigido: {line}", file=sys.stderr)
+        if not res["applied"]:
+            print("nada a corrigir automaticamente.", file=sys.stderr)
+        elif a.out:
+            Path(a.out).write_text(res["text"], encoding="utf-8")
+            print(f"gravado: {a.out}", file=sys.stderr)
+            a.scene = a.out
+        else:
+            Path(a.scene).write_text(res["text"], encoding="utf-8")   # sobrescreve só com --fix explícito
+            print(f"gravado: {a.scene}", file=sys.stderr)
     diags, scene, _ = load_file(a.scene)
     if a.json:
         print(json.dumps([d.to_dict() for d in diags], ensure_ascii=False, indent=2))
@@ -37,6 +53,44 @@ def cmd_validate(a) -> int:
     if not a.json:
         print(f"\n{'OK' if scene else 'INVÁLIDA'}: {errors} erro(s), {warns} aviso(s).")
     return 0 if scene else 1
+
+
+def cmd_primer(a) -> int:
+    from . import primer
+
+    sys.stdout.write(primer.primer())
+    return 0
+
+
+def cmd_vocab(a) -> int:
+    from . import primer
+
+    v = primer.vocab()
+    if a.json:
+        print(json.dumps(v, ensure_ascii=False, indent=2))
+    else:
+        for k, vals in v.items():
+            print(f"{k}: {', '.join(vals)}")
+    return 0
+
+
+def cmd_new(a) -> int:
+    from . import templates
+
+    if a.template is None:
+        print("modelos: " + ", ".join(templates.names()))
+        return 0
+    try:
+        text = templates.get(a.template)
+    except KeyError:
+        print(f"modelo desconhecido: {a.template!r} (disponíveis: {', '.join(templates.names())})", file=sys.stderr)
+        return 1
+    if a.out:
+        Path(a.out).write_text(text, encoding="utf-8")
+        print(f"gravado: {a.out}")
+    else:
+        sys.stdout.write(text)
+    return 0
 
 
 def cmd_compile(a) -> int:
@@ -215,6 +269,64 @@ def cmd_sweep_score(a) -> int:
     return 0 if tau == 1 else 1
 
 
+def cmd_snap(a) -> int:
+    from PIL import Image
+
+    from . import verify as ver
+
+    scene, _ = _load(a.scene)
+    try:
+        out = ver.snap(scene, Image.open(a.image), a.grid, a.colors, a.to_palette, a.fit, a.scale)
+    except ValueError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    out.save(a.out)
+    print(f"gravado: {a.out}")
+    return 0
+
+
+def cmd_sheet_prompt(a) -> int:
+    scene, _ = _load(a.scene)
+    from . import variants as var
+
+    path, items = var.make_sweep(scene.data, a.axis)
+    labels = [lb for lb, _ in items]
+    first = load_text(dump_scene(items[0][1]))[1]
+    body = BACKENDS["prose"](first)
+    lines = [f"{i}: {path} = {lb}" for i, lb in enumerate(labels, 1)]
+    sheet = (f"FOLHA DE VARIANTES: desenhe {len(labels)} versões do mesmo personagem lado a lado, da esquerda para a direita, "
+             "em um único quadro, com o mesmo tamanho, pose e enquadramento; muda APENAS o eixo abaixo, de forma bem visível, "
+             "e nada mais. Numere as versões 1 a " + str(len(labels)) + " de baixo, sem outro texto.\n" + "\n".join(lines) + "\n\n")
+    text = sheet + body
+    if a.out:
+        Path(a.out).write_text(text, encoding="utf-8")
+        print(f"gravado: {a.out}")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def cmd_sheet_measure(a) -> int:
+    from PIL import Image
+
+    from . import variants as var
+    from . import verify as ver
+
+    scene, _ = _load(a.scene)
+    rows = ver.sheet_metrics(scene, Image.open(a.image), a.n)
+    keys = ["area", "largura", "irregularidade"]
+    print("n  " + "  ".join(f"{k:>14}" for k in keys))
+    for r in rows:
+        print(f"{r['n']}  " + "  ".join(f"{r[k]:>14}" for k in keys))
+    if a.metric:
+        vals = [r[a.metric] for r in rows]
+        order = sorted(range(len(vals)), key=lambda i: vals[i], reverse=a.decreasing)
+        tau = var.kendall_tau(list(range(1, a.n + 1)), [i + 1 for i in order])
+        print(f"\nmétrica {a.metric}: tau de Kendall vs. ordem pedida = {tau:+.2f}")
+        return 0 if tau == 1 else 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="scenelang", description="Linguagem de cena para modelos de imagem")
     p.add_argument("--version", action="version", version=f"scenelang {__version__}")
@@ -222,7 +334,18 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("validate", help="valida esquema, vocabulário, referências e conflitos")
     s.add_argument("scene"); s.add_argument("--json", action="store_true", help="diagnósticos em JSON")
+    s.add_argument("--fix", action="store_true", help="aplica as correções seguras (typos de vocabulário e de campo)")
+    s.add_argument("--out", help="com --fix: grava o resultado aqui em vez de sobrescrever a cena")
     s.set_defaults(fn=cmd_validate)
+
+    s = sub.add_parser("primer", help="cartilha de uma página para o modelo escrever cenas")
+    s.set_defaults(fn=cmd_primer)
+
+    s = sub.add_parser("vocab", help="vocabulários fechados")
+    s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_vocab)
+
+    s = sub.add_parser("new", help="cena inicial pronta (sem argumento: lista os modelos)")
+    s.add_argument("template", nargs="?"); s.add_argument("--out"); s.set_defaults(fn=cmd_new)
 
     s = sub.add_parser("compile", help="compila a cena para um backend")
     s.add_argument("scene"); s.add_argument("--target", choices=sorted(BACKENDS), default="prose")
@@ -265,6 +388,21 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("sweep-score", help="mede se a imagem seguiu o eixo (ordem observada × esperada)")
     s.add_argument("form"); s.set_defaults(fn=cmd_sweep_score)
+
+    s = sub.add_parser("snap", help="transforma a saída do modelo em pixel art de verdade (grade, cores, fundo transparente)")
+    s.add_argument("scene"); s.add_argument("image"); s.add_argument("--out", required=True)
+    s.add_argument("--grid", type=int); s.add_argument("--colors", type=int)
+    s.add_argument("--to-palette", action="store_true", help="usa só as cores exatas da paleta")
+    s.add_argument("--fit", action="store_true", help="recorta e encaixa o sujeito nas linhas-guia")
+    s.add_argument("--scale", type=int, default=8); s.set_defaults(fn=cmd_snap)
+
+    s = sub.add_parser("sheet-prompt", help="um prompt único com N variantes lado a lado (folha de variantes)")
+    s.add_argument("scene"); s.add_argument("--axis", required=True); s.add_argument("--out"); s.set_defaults(fn=cmd_sheet_prompt)
+
+    s = sub.add_parser("sheet-measure", help="mede cada coluna de uma folha de variantes")
+    s.add_argument("scene"); s.add_argument("image"); s.add_argument("--n", type=int, default=3)
+    s.add_argument("--metric", choices=["area", "largura", "irregularidade"])
+    s.add_argument("--decreasing", action="store_true"); s.set_defaults(fn=cmd_sheet_measure)
 
     a = p.parse_args(argv)
     return a.fn(a)

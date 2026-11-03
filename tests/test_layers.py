@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PIXEL = ROOT / "examples" / "pixel_heroi.yaml"
 
 PROPOSAL = {
-    "palette": {"main": [230, 120, 40], "gold": [240, 190, 60], "brown": [120, 70, 40]},
+    "palette": {"main": [40, 90, 210], "navy": [20, 35, 90], "steel": [160, 170, 190]},
     "guides": {"head_top": 0.08, "chin": 0.29, "shoulder": 0.3425, "waist": 0.542, "knee": 0.735, "baseline": 0.92},
 }
 
@@ -106,17 +106,17 @@ def test_proposal_checks_count_harmony_and_distance(planned):
     p["palette"]["proposal"]["extra"] = {"rgb": [10, 10, 200]}
     assert "esperado 5" in messages(errors(validate_data(p)[0]))
     p = copy.deepcopy(planned)
-    p["palette"]["proposal"]["main"] = {"rgb": [40, 90, 210]}   # azul: fora da análoga laranja
+    p["palette"]["proposal"]["main"] = {"rgb": [60, 180, 70]}   # verde: terceiro grupo de matiz fora do complementar
     assert "harmonia" in messages(errors(validate_data(p)[0]))
     p = copy.deepcopy(planned)
-    p["palette"]["proposal"]["gold"] = {"rgb": [231, 121, 41]}  # quase igual a 'main'
+    p["palette"]["proposal"]["navy"] = {"rgb": [41, 91, 211]}  # quase igual a 'main'
     assert "parecidas demais" in messages(errors(validate_data(p)[0]))
 
 
 def test_cmyk_space_proposal(data):
     data["palette"]["space"] = "cmyk"
-    new = plan_mod.apply_plan(data, {"palette": {"main": [0, 60, 90, 5], "gold": [0, 30, 90, 0], "brown": [40, 70, 90, 30]}})
-    assert new["palette"]["proposal"]["main"] == {"cmyk": [0, 60, 90, 5]}
+    new = plan_mod.apply_plan(data, {"palette": {"main": [80, 57, 0, 18], "navy": [78, 61, 0, 65], "steel": [15, 10, 0, 25]}})
+    assert new["palette"]["proposal"]["main"] == {"cmyk": [80, 57, 0, 18]}
     assert not errors(validate_data(new)[0])
 
 
@@ -310,9 +310,9 @@ def make_sprite(scene, scale=16, flawed=None):
     key = fx.key_color(scene.data)
     cells = np.zeros((32, 32, 3), "uint8")
     cells[:] = key
-    skin, orange, ink = (255, 178, 140), (230, 120, 40), (27, 27, 38)
+    skin, blue, ink = (255, 178, 140), (40, 90, 210), (27, 27, 38)
     cells[3:10, 12:20] = skin
-    cells[10:25, 10:22] = orange
+    cells[10:25, 10:22] = blue
     cells[25:30, 12:16] = ink
     cells[25:30, 16:20] = ink
     if flawed == "asym":
@@ -321,6 +321,9 @@ def make_sprite(scene, scale=16, flawed=None):
         cells[12:22, 11:21] = (40, 225, 40)   # verde vazando para dentro do corpo
     img = Image.fromarray(cells).resize((32 * scale, 32 * scale), Image.NEAREST)
     return img
+
+
+PROPOSAL_VERIFY = ["max_colors(16)", "grid_aligned(32)", "symmetric(vertical, 0.8, legs)", "fit_guides(0.04)", "palette_match(10)", "chroma_clean()", "no_spill()"]
 
 
 def results(scene, img):
@@ -345,7 +348,11 @@ def test_blurred_image_fails_pixel_checks(planned):
 
 def test_asymmetry_and_spill_are_detected(planned):
     _, scene = validate_data(planned)
-    assert not results(scene, make_sprite(scene, flawed="asym"))["symmetric(vertical, 0.8)"].ok
+    scene.data["verify"] = ["symmetric(vertical, 0.8)", "symmetric(vertical, 0.8, legs)"]
+    res = results(scene, make_sprite(scene, flawed="asym"))
+    assert not res["symmetric(vertical, 0.8)"].ok          # o corpo todo é assimétrico
+    assert res["symmetric(vertical, 0.8, legs)"].ok        # as pernas continuam simétricas
+    scene.data["verify"] = list(PROPOSAL_VERIFY)
     spill = results(scene, make_sprite(scene, flawed="spill"))
     assert not spill["no_spill()"].ok
     assert not spill["palette_match(10)"].ok

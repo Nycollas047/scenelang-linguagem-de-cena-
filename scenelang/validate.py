@@ -17,7 +17,7 @@ from . import layout as L
 from . import vocab as V
 from .assertions import AssertSyntaxError, check_refs, parse_assert
 from .model import SLUG, Diagnostic, RefError, Scene, build_scene
-from . import fx, guides, materials, palette as pal_layer
+from . import character, fx, guides, lint, materials, palette as pal_layer
 from . import variants
 from . import verify as verify_mod
 from .negations import to_affirmation
@@ -32,7 +32,7 @@ REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
 ENTITY_KEYS = {
     "id", "kind", "label", "desc", "plane", "at", "size", "box", "orient",
     "brightness", "saturation", "tags", "details",
-    "wind_parts", "translucent", "material", "parts", "detail",
+    "wind_parts", "translucent", "material", "parts", "detail", "character",
 }
 LIGHT_KEYS = {"role", "color", "source", "hits", "note"}
 CAMERA_KEYS = {"angle", "lens", "focus", "depth_blur"}
@@ -46,8 +46,8 @@ class _Collector:
         self.items: list[Diagnostic] = []
         self.skipped: set[str] = set()  # ids de entidades sem geometria utilizável
 
-    def error(self, path, message, got=None, accepted=None, hint=None):
-        self.items.append(Diagnostic("error", path, message, got, accepted, hint))
+    def error(self, path, message, got=None, accepted=None, hint=None, fix=None):
+        self.items.append(Diagnostic("error", path, message, got, accepted, hint, fix))
 
     def warn(self, path, message, got=None, accepted=None, hint=None):
         self.items.append(Diagnostic("warning", path, message, got, accepted, hint))
@@ -60,6 +60,7 @@ class _Collector:
 from .checks import enum_check as _enum  # noqa: E402
 from .checks import is_num as _is_num  # noqa: E402
 from .checks import str_list as _str_list  # noqa: E402
+from .checks import closest  # noqa: E402
 from .checks import suggest as _suggest  # noqa: E402
 
 
@@ -71,7 +72,9 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
 
     for key in data:
         if key not in TOP_KEYS:
-            c.error(f"$.{key}", "campo desconhecido", got=key, accepted=sorted(TOP_KEYS), hint=_suggest(key, TOP_KEYS))
+            near = closest(key, TOP_KEYS)
+            c.error(f"$.{key}", "campo desconhecido", got=key, accepted=sorted(TOP_KEYS), hint=_suggest(key, TOP_KEYS),
+                    fix={"path": f"$.{key}", "rename": near} if near else None)
     for key in REQUIRED_TOP:
         if key not in data:
             c.error(f"$.{key}", "campo obrigatório ausente")
@@ -129,7 +132,9 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
             n_id = len(c.items)
             for key in e:
                 if key not in ENTITY_KEYS:
-                    c.error(f"{p}.{key}", "campo desconhecido", got=key, accepted=sorted(ENTITY_KEYS), hint=_suggest(key, ENTITY_KEYS))
+                    near = closest(key, ENTITY_KEYS)
+                    c.error(f"{p}.{key}", "campo desconhecido", got=key, accepted=sorted(ENTITY_KEYS), hint=_suggest(key, ENTITY_KEYS),
+                            fix={"path": f"{p}.{key}", "rename": near} if near else None)
             eid = e.get("id")
             if not isinstance(eid, str) or not SLUG.match(eid):
                 c.error(f"{p}.id", "id deve ser um slug (minúsculas, dígitos e _, começando por letra)", got=eid)
@@ -146,7 +151,8 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
                 if not isinstance(e.get(req), str) or not e.get(req, "").strip():
                     c.error(f"{p}.{req}", "campo obrigatório: texto não vazio",
                             hint='label com artigo, ex.: "a lança"' if req == "label" else None)
-            if isinstance(e.get("label"), str) and not re.match(r"^(o|a|os|as) ", e["label"]):
+            auto = isinstance(e.get("id"), str) and e.get("label") == e["id"].replace("_", " ")   # label gerado do id
+            if isinstance(e.get("label"), str) and not auto and not re.match(r"^(o|a|os|as) ", e["label"]):
                 c.warn(f"{p}.label", "label sem artigo; as frases ficam melhores com 'o/a/os/as'", got=e["label"])
             if "orient" in e:
                 _enum(c, f"{p}.orient", e["orient"], V.DIRECTIONS)
@@ -210,8 +216,10 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
     fx.check_background(c, data, scene)
     fx.check_atmosphere(c, data, scene)
     materials.check(c, data)
+    character.check(c, data, scene)
     _check_lock(c, data, scene)
     verify_mod.check(c, data)
+    lint.check(c, data, scene)
 
     return c.items, (scene if not c.has_errors else None)
 
@@ -459,5 +467,8 @@ def load_text(text: str, base_dir: str | Path | None = None) -> tuple[list[Diagn
         data = variants.resolve(data, Path(base_dir) if base_dir else None)
     except variants.VariantError as e:
         return [Diagnostic("error", "$.extends", str(e))], None, None
+    from . import normalize
+
+    data, _notes = normalize.apply_defaults(data)
     diags, scene = validate_data(data)
     return diags, scene, data

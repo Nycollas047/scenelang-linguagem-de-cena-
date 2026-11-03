@@ -37,7 +37,8 @@ cena.yaml ─► validate ─► IR ─┬─► prose / json / regions ─► m
 | Guias | `guides` (cânone de cabeças, eixo, linhas, margem; `model_proposes`) | proporção e consistência |
 | Fundo | `background` (`chromakey`, `alpha: chroma\|difference`) | recorte e canal alfa |
 | Atmosfera | `atmosphere` (mood, clima, vento), `wind_parts` | coerência entre objetos leves e o vento |
-| Materiais | `materials`, `material`/`parts`, `detail` | textura por parte e orçamento de detalhe |
+| Materiais | `materials`, `material`/`parts` (tecido, trama, caimento, escamas), `detail` | textura por parte e orçamento de detalhe |
+| Personagem | `entities[].character` (idade, herança, tom de pele, cabelo, olhos, rosto, corpo, partes) | biotipo descrito atributo por atributo, sem inferências |
 | Intenção e olhar | `intent`, `gaze`, `lights`, `camera` | foco e ordem de leitura |
 | Verificação | `asserts` (layout), `verify` (imagem) | critérios mensuráveis |
 | Reuso | `extends`, `import`, `lock` | variantes, bibliotecas e partes travadas |
@@ -57,6 +58,10 @@ Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
 | `cutout CENA IMAGEM --out F.png` / `cutout --black B --white W --out F.png` | PNG com alfa (por chave ou por diferença de duas passadas). |
 | `sweep CENA --axis caminho=v1,v2,v3 --out DIR` / `sweep-score FICHA` | Variantes que mudam um eixo só; mede se a imagem seguiu a ordem. |
 | `eval-form` / `eval-apply [--lock-passed]` | Ficha de avaliação, reforço do que falhou e trava do que passou. |
+| `snap CENA IMAGEM --out F.png [--grid N --colors N --to-palette --fit]` | Pixel art de verdade: grade, cores, paleta exata, encaixe nas guias, fundo transparente. |
+| `sheet-prompt` / `sheet-measure` | Variantes lado a lado num prompt só e medida de cada coluna. |
+| `primer` / `vocab [--json]` / `new [modelo]` | Cartilha de uma página, vocabulários e cenas iniciais para o modelo escrever cenas. |
+| `validate --fix [--out F]` | Aplica as correções seguras que o validador propõe (typos de valor e de campo). |
 
 ## Regras importantes
 
@@ -74,8 +79,10 @@ Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
 - `examples/guardia.yaml` — splash art 16:9, grade áurea, 11 asserts.
 - `examples/emblema.yaml` — quadro circular, grade de terços, `count` com glossário.
 - `examples/pixel_heroi.yaml` — pixel art 32×32 com paleta escolhida pelo modelo, guias, chromakey, vento, materiais e 7 verificadores.
+- `examples/dragoa_e_cavaleira.yaml` — escrita por um modelo pequeno só com a cartilha: escamas com degradê, personagem com tom de pele, capa ao vento.
+- `scenelang new sprite|splash|emblem|character-sheet` — cenas iniciais que já validam sem avisos.
 - `examples/pixel_heroi_noite.yaml` — variante por `extends` + biblioteca de materiais + travas.
 
 ## Status
 
-Versão 0.2 (experimental). Fora desta versão: camadas separadas e crítico automático por visão, previz 3D (Blender via MCP), adaptação para uso por LLMs (MCP), mais idiomas. A linguagem é neutra quanto a fornecedor e não contém mecanismos para contornar políticas de uso de modelos.
+Versão 0.3 (experimental). Testada com modelos pequenos escrevendo cenas só com a cartilha (`scenelang primer`): de 3 rodadas de validação na primeira bateria para 2 na segunda, e cada lacuna achada virou correção. Fora desta versão: camadas separadas e crítico automático por visão, previz 3D (Blender via MCP), empacotamento MCP, mais idiomas. A linguagem é neutra quanto a fornecedor e não contém mecanismos para contornar políticas de uso de modelos.

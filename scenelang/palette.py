@@ -71,6 +71,16 @@ def approx_named_colors(data: dict) -> dict[str, tuple[int, int, int]]:
     return out
 
 
+def _forms(name: str) -> list[str]:
+    """Flexões comuns do nome de uma cor (vermelho/vermelha/vermelhos, azul/azuis)."""
+    forms = {name, name + "s"}
+    if name.endswith("o"):
+        forms |= {name[:-1] + "a", name[:-1] + "as"}
+    if name.endswith("l"):
+        forms.add(name[:-1] + "is")
+    return sorted(forms, key=len, reverse=True)
+
+
 def mentioned_colors(data: dict) -> dict[str, tuple[int, int, int]]:
     """Cores citadas por nome nas descrições das entidades (ex.: 'capa azul'). Aproximadas."""
     import re
@@ -79,12 +89,19 @@ def mentioned_colors(data: dict) -> dict[str, tuple[int, int, int]]:
         str(x) for e in data.get("entities") or [] if isinstance(e, dict)
         for x in [e.get("label", ""), e.get("desc", ""), *(e.get("details") or [])]
     ).lower()
-    return {n: rgb for n, rgb in C.NAMES_PT.items() if re.search(rf"(?<![\w-]){re.escape(n)}(?![\w])", text)}
+    out = {}
+    for n, rgb in C.NAMES_PT.items():
+        alt = "|".join(re.escape(f) for f in _forms(n))
+        if re.search(rf"(?<![\w-])(?:{alt})(?![\w])", text):
+            out[n] = rgb
+    return out
 
 
 def reference_colors(data: dict) -> list[tuple[int, int, int]]:
+    from . import character
+
     return (list(all_colors(data).values()) + list(approx_named_colors(data).values())
-            + list(mentioned_colors(data).values()))
+            + list(mentioned_colors(data).values()) + list(character.skin_colors(data).values()))
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +126,8 @@ def check(c, data: dict) -> None:
     if "harmony" in pal:
         enum_check(c, "$.palette.harmony", pal["harmony"], C.HARMONIES)
     count = pal.get("count")
-    if count is not None and not (isinstance(count, int) and not isinstance(count, bool) and 2 <= count <= 12):
-        c.error("$.palette.count", "deve ser um inteiro entre 2 e 12", got=count)
+    if count is not None and not (isinstance(count, int) and not isinstance(count, bool) and 2 <= count <= 16):
+        c.error("$.palette.count", "deve ser um inteiro entre 2 e 16", got=count)
         count = None
     cons = pal.get("constraints")
     if cons is not None:

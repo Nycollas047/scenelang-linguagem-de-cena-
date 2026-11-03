@@ -88,6 +88,9 @@ ANCHORS = {
     "left": (0.0, 0.5),
     "right": (1.0, 0.5),
     "head": (0.5, 0.08),
+    "eye": (0.5, 0.10),
+    "chest": (0.5, 0.35),
+    "hand": (0.5, 0.5),
     "face": (0.5, 0.12),
     "shoulder": (0.5, 0.25),
     "feet": (0.5, 0.97),
@@ -102,6 +105,9 @@ ANCHOR_PT = {
     "left": "o lado esquerdo",
     "right": "o lado direito",
     "head": "a cabeça",
+    "eye": "o olho",
+    "chest": "o peito",
+    "hand": "a mão",
     "face": "o rosto",
     "shoulder": "o ombro",
     "feet": "os pés",
@@ -146,7 +152,8 @@ PART_PT = {
     "armor": "a armadura", "sword": "a espada", "scarf": "o cachecol", "skirt": "a saia", "grass": "a grama",
     "sail": "a vela", "tail": "a cauda", "mane": "a juba", "fur": "o pelo", "cloth": "o tecido",
     "plume": "a pluma", "ribbon": "a fita", "hood": "o capuz", "shield": "o escudo", "helmet": "o elmo",
-    "skin": "a pele", "boots": "as botas", "gloves": "as luvas", "staff": "o cajado", "spear": "a lança",
+    "skin": "a pele", "back": "o dorso", "chest": "o peito", "belly": "a barriga", "arms": "os braços", "legs": "as pernas",
+    "head": "a cabeça", "neck": "o pescoço", "hands": "as mãos", "feet": "os pés", "wings": "as asas", "horns": "os chifres", "boots": "as botas", "gloves": "as luvas", "staff": "o cajado", "spear": "a lança",
 }
 
 

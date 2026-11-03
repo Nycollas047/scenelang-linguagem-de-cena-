@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from . import fx, guides, materials
+from . import character, fx, guides, materials
 from . import layout as L
 from . import palette as PAL
 from . import phrases as P
@@ -67,7 +67,7 @@ def entity_sentence(scene: Scene, e: Entity) -> str:
     elif e.brightness == "low" or e.saturation == "muted":
         parts.append("Permanece discreto: baixa saturação e brilho contido.")
     parts.extend(f"{d}." if not d.endswith(".") else d for d in e.details)
-    for extra in (materials.entity_sentence(scene, e.id), fx.wind_sentence(scene, e.id)):
+    for extra in (character.sentence(scene, e.id), materials.entity_sentence(scene, e.id), fx.wind_sentence(scene, e.id)):
         if extra:
             parts.append(extra)
     return " ".join(parts)

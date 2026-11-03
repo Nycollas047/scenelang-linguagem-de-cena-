@@ -23,7 +23,7 @@ from . import palette as PAL
 from .checks import is_num, suggest
 
 NAMES = ("max_colors", "grid_aligned", "symmetric", "fit_guides", "palette_match", "chroma_clean", "no_spill", "margin")
-ARITY = {"max_colors": (1, 1), "grid_aligned": (0, 2), "symmetric": (1, 2), "fit_guides": (0, 1),
+ARITY = {"max_colors": (1, 1), "grid_aligned": (0, 2), "symmetric": (1, 3), "fit_guides": (0, 1),
          "palette_match": (1, 2), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1)}
 CALL = re.compile(r"^\s*([a-z_]+)\s*\((.*)\)\s*$")
 
@@ -63,9 +63,14 @@ def parse(raw: str) -> Check:
     lo, hi = ARITY[name]
     if not lo <= len(args) <= hi:
         raise VerifySyntaxError(f"{name} espera {lo if lo == hi else f'{lo} a {hi}'} argumento(s), recebeu {len(args)}: {raw!r}")
-    if name == "symmetric" and args[0] != "vertical":
-        raise VerifySyntaxError("symmetric só aceita 'vertical' por enquanto")
-    nums = args[1:] if name == "symmetric" else args
+    if name == "symmetric":
+        if args[0] != "vertical":
+            raise VerifySyntaxError("symmetric só aceita 'vertical' por enquanto")
+        if len(args) == 2 and args[1] == "legs":
+            args.insert(1, 0.8)
+        if len(args) == 3 and args[2] != "legs":
+            raise VerifySyntaxError("o terceiro argumento de symmetric só pode ser 'legs'")
+    nums = [a for a in (args[1:] if name == "symmetric" else args) if a != "legs"]
     if not all(is_num(a) and a > 0 for a in nums):
         raise VerifySyntaxError(f"os argumentos numéricos de {name} devem ser positivos: {raw!r}")
     return Check(name, args, raw)
@@ -192,17 +197,23 @@ def v_grid_aligned(f: Frame, a: list) -> Result:
 
 def v_symmetric(f: Frame, a: list) -> Result:
     np, _ = _np()
-    need = float(a[1]) if len(a) > 1 else 0.8
+    need = float(a[1]) if len(a) > 1 and a[1] != "legs" else 0.8
     if f.bbox is None:
         return Result("symmetric", False, "nenhum sujeito encontrado")
     x0, y0, x1, y1 = (int(round(v)) for v in (f.bbox[0] * f.W, f.bbox[1] * f.H, f.bbox[2] * f.W, f.bbox[3] * f.H))
+    legs = "legs" in a
+    if legs:   # só as pernas (último terço): capa, cabelo e outras partes ao vento ficam de fora
+        y0 = y1 - max(1, (y1 - y0) * 3 // 10)
+        cols = np.where(f.fg[y0:y1].any(axis=0))[0]
+        x0, x1 = int(cols.min()), int(cols.max()) + 1
     sub = f.lab[y0:y1, x0:x1]
     fg = f.fg[y0:y1, x0:x1]
     flip, fgf = sub[:, ::-1], fg[:, ::-1]
     union = fg | fgf
     same = fg & fgf & (np.linalg.norm(sub - flip, axis=-1) <= 8)
     score = float(same.sum() / max(union.sum(), 1))
-    return Result(f"symmetric(vertical, {need:g})", score >= need, f"simetria {score:.1%} (mínimo {need:.0%})", score)
+    tag = ", legs" if legs else ""
+    return Result(f"symmetric(vertical, {need:g}{tag})", score >= need, f"simetria {score:.1%}{' das pernas' if legs else ''} (mínimo {need:.0%})", score)
 
 
 def v_fit_guides(f: Frame, a: list) -> Result:
@@ -308,8 +319,35 @@ def cutout_chroma(scene, image):
     safe = np.maximum(alpha, 1e-3)[..., None]
     fg = np.clip((rgb - (1 - alpha)[..., None] * k) / safe, 0, 255)
     fg = np.where((alpha > 0.02)[..., None], fg, rgb)
+    fg = _despill(fg, alpha, key)
     out = np.dstack([fg, alpha * 255]).astype("uint8")
     return Image.fromarray(out, "RGBA")
+
+
+def _despill(fg, alpha, key):
+    """Tira o tom da chave das bordas: o canal dominante da chave não pode passar dos outros."""
+    np, _ = _np()
+    dom = [i for i in range(3) if key[i] >= 200]
+    oth = [i for i in range(3) if key[i] < 200]
+    if not dom or not oth:
+        return fg
+    solid = alpha > 0.5
+    if solid.all():                          # chamada por célula: aplica em tudo
+        out = fg.copy()
+        cap = fg[..., oth].max(axis=-1) if len(dom) == 1 else fg[..., oth[0]]
+        for i in dom:
+            out[..., i] = np.minimum(fg[..., i], cap)
+        return out
+    near_bg = ~solid
+    band = np.zeros_like(solid)
+    for _ in range(3):                      # faixa de 3 px em volta do fundo
+        near_bg = near_bg | np.roll(near_bg, 1, 0) | np.roll(near_bg, -1, 0) | np.roll(near_bg, 1, 1) | np.roll(near_bg, -1, 1)
+    band = near_bg & (alpha > 0)
+    cap = fg[..., oth].max(axis=-1) if len(dom) == 1 else fg[..., oth[0]]
+    out = fg.copy()
+    for i in dom:
+        out[..., i] = np.where(band, np.minimum(fg[..., i], cap), fg[..., i])
+    return out
 
 
 def cutout_difference(on_black, on_white):
@@ -322,3 +360,75 @@ def cutout_difference(on_black, on_white):
     alpha = np.clip(1 - (w - b).mean(axis=-1) / 255, 0, 1)
     fg = np.clip(b / np.maximum(alpha, 1e-3)[..., None], 0, 255)
     return Image.fromarray(np.dstack([fg, alpha * 255]).astype("uint8"), "RGBA")
+
+
+# ---- snap: transforma a saída do modelo em pixel art de verdade -------------------
+def snap(scene, image, grid: int | None = None, colors: int | None = None, to_palette: bool = False, fit: bool = False, scale: int = 8):
+    """Reduz a imagem à grade n×m, limita as cores e deixa o fundo transparente.
+
+    fit=True antes recorta o sujeito e o encaixa nas linhas-guia (topo, pés e eixo)."""
+    np, Image = _np()
+    d = scene.data
+    n = grid or d["canvas"].get("pixel_grid")
+    if not n:
+        raise ValueError("informe a grade (--grid N) ou defina canvas.pixel_grid")
+    m = max(1, round(n / scene.ratio))
+    frame = Frame(scene, image)
+    key = frame.key if frame.key is not None else (0, 255, 0)
+    img = image.convert("RGB")
+    if fit:
+        lines = guides.guide_lines(scene)
+        if "head_top" not in lines or "baseline" not in lines or frame.bbox is None:
+            raise ValueError("fit exige guias (head_top e baseline) e um sujeito na imagem")
+        x0, y0, x1, y1 = (int(round(v)) for v in (frame.bbox[0] * frame.W, frame.bbox[1] * frame.H, frame.bbox[2] * frame.W, frame.bbox[3] * frame.H))
+        crop = img.crop((x0, y0, x1, y1))
+        th = max(1, round((lines["baseline"] - lines["head_top"]) * frame.H))
+        tw = max(1, round(crop.size[0] * th / crop.size[1]))
+        crop = crop.resize((tw, th), Image.LANCZOS)
+        ax = guides.axis_x(scene)
+        cx = round((ax if ax is not None else 0.5) * frame.W)
+        canvas = Image.new("RGB", (frame.W, frame.H), key)
+        canvas.paste(crop, (cx - tw // 2, round(lines["head_top"] * frame.H)))
+        img = canvas
+    big = np.asarray(img.resize((n * 4, m * 4), Image.BOX)).astype("float64")
+    fgf = (_de(_lab(big), key) > max(frame.tol, 40)).astype("float64")   # halos esverdeados contam como fundo
+    cover = fgf.reshape(m, 4, n, 4).mean(axis=(1, 3))
+    solid = cover >= 0.5
+    # cor de cada célula só com os pixels do sujeito (a borda não se mistura com a chave)
+    weighted = (big * fgf[..., None]).reshape(m, 4, n, 4, 3).sum(axis=(1, 3))
+    rgb = np.where(solid[..., None], weighted / np.maximum(fgf.reshape(m, 4, n, 4).sum(axis=(1, 3)), 1)[..., None], 0.0)
+    if solid.any():
+        rgb[~solid] = rgb[solid].mean(axis=0)
+    rgb = _despill(rgb, np.ones(rgb.shape[:2]), key)   # nenhuma célula do sujeito carrega o tom da chave
+    pal = list(PAL.all_colors(d).values()) if to_palette else []
+    if pal:
+        labs = np.array([C.to_lab(c) for c in pal])
+        flat = _lab(rgb.reshape(-1, 3))
+        idx = np.argmin(np.linalg.norm(flat[:, None, :] - labs[None], axis=-1), axis=1)
+        rgb = np.array(pal, dtype="float64")[idx].reshape(m, n, 3)
+    elif colors or (d.get("palette") or {}).get("constraints", {}).get("max_colors"):
+        k = int(colors or d["palette"]["constraints"]["max_colors"])
+        q = Image.fromarray(rgb.astype("uint8")).quantize(colors=min(k, 255), method=Image.Quantize.MEDIANCUT).convert("RGB")
+        rgb = np.asarray(q).astype("float64")
+    alpha = np.where(solid, 255, 0).astype("uint8")
+    out = Image.fromarray(np.dstack([rgb.astype("uint8"), alpha]), "RGBA")
+    return out.resize((n * scale, m * scale), Image.NEAREST)
+
+
+# ---- folha de variantes: mede cada coluna de uma imagem com N variantes lado a lado ----
+def sheet_metrics(scene, image, n: int = 3) -> list[dict]:
+    np, _ = _np()
+    W, H = image.size
+    out = []
+    for i in range(n):
+        fr = Frame(scene, image.crop((i * W // n, 0, (i + 1) * W // n, H)))
+        m = fr.fg
+        edge = m & ~(np.roll(m, 1, 0) & np.roll(m, -1, 0) & np.roll(m, 1, 1) & np.roll(m, -1, 1))
+        area = float(m.mean())
+        out.append({
+            "n": i + 1,
+            "area": round(area, 4),
+            "largura": round(float((fr.bbox[2] - fr.bbox[0]) * fr.W), 1) if fr.bbox else 0.0,
+            "irregularidade": round(float(edge.sum() / max(np.sqrt(m.sum()), 1)), 3),
+        })
+    return out

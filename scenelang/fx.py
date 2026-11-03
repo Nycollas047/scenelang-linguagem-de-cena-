@@ -108,7 +108,9 @@ def check_background(c, data: dict, scene) -> None:
     else:
         key = pick_key(data)
     if key is not None:
-        for name, rgb in {**PAL.all_colors(data), **PAL.approx_named_colors(data), **PAL.mentioned_colors(data)}.items():
+        from . import character
+
+        for name, rgb in {**PAL.all_colors(data), **PAL.approx_named_colors(data), **PAL.mentioned_colors(data), **character.skin_colors(data)}.items():
             d = C.delta_e(key, rgb)
             if d < 35:
                 c.warn("$.background.key", f"a chave {C.to_hex(key)} é parecida com a cor {name!r} da paleta (ΔE {d:.0f}): vai vazar para o sujeito",
