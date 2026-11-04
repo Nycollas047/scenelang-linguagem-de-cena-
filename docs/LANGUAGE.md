@@ -64,6 +64,19 @@ Atributos descritivos e independentes. Nada é deduzido de `heritage` (texto liv
 
 A cor da pele entra nas cores de referência da escolha automática da chave do fundo.
 
+## Pose em graus (`entities[].pose`, v0.4)
+Evita anatomia impossível: cada junta recebe um ângulo e a linguagem rejeita o que o corpo humano não faz.
+- `body_yaw`: -180..180 (0 de frente, 90 perfil para a direita da imagem, 180 de costas).
+- `joints`: `neck`, `spine`, `{left,right}_{shoulder,elbow,wrist,hip,knee,ankle}`; número = eixo principal, mapa = eixos
+  (`flex`, `abduct`, `rotate`, `turn`, `twist`, `tilt`, `side`). Esquerda/direita são do personagem; 0° = neutro.
+- `hold`: o que cada mão/pé segura (`left_hand`, `right_hand`, `left_foot`, `right_foot`).
+- Fora da faixa: erro com `fix` (limita ao máximo); perto do limite: aviso; corpo de costas sem girar o pescoço: aviso.
+
+## Relatório de perdas (v0.4)
+`scenelang compile cena.yaml --loss` lista o que o backend não leva ao gerador (`lost`, `approx`, `unchecked`);
+`--strict` falha com código 3 se há parte sem tradução ou a cena não tem asserts. O backend `regions` agora leva
+intenção, iluminação, detalhes e acabamento no `global_prompt` e as camadas (personagem, pose, material, vento) em cada região.
+
 ## Tecidos e escamas (em `material`, `parts` ou `materials`)
 
 - Tecido: `fabric` (cotton, linen, silk, satin, wool, velvet, denim, lace, canvas, tulle, leather, burlap, chiffon, felt, tweed, corduroy, suede, fleece, knit, mesh), `weave` (plain, twill, checked, striped, herringbone, polka, floral, embroidered, brocade, quilted, pleated, ribbed, patched), `drape` (stiff, structured, flowing, heavy, clingy, billowing, tattered). `base: cloth` é implícito.

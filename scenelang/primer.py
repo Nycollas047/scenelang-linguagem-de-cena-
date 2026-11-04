@@ -84,6 +84,7 @@ entities:
 | escolher cores | `palette` (topo) | `{{mode: model_picks, count: 5, harmony: triadic}}` |
 | proporção e posição | `guides` (topo) | `{{subject: fox, canon: stylized}}` — canon: {", ".join(v["guides.canon"])} ou `{{heads_tall: 4}}` |
 | recortar fundo | `background` (topo) | `{{mode: chromakey}}`: a cor da chave é escolhida longe da sua paleta; para forçar, `key: "#00ff00"` |
+| pose (anatomia em graus) | `pose` (na entidade) | `{{body_yaw: 135, joints: {{right_elbow: 90, neck: {{turn: -60}}}}}}` — esquerda/direita do personagem; fora da faixa humana é erro |
 | clima e vento | `atmosphere` (topo) | `{{mood: epic, weather: storm, wind: {{direction: right, strength: high}}}}`; entidade: `wind_parts: [cape]` |
 | tecido/material de uma peça | `parts` (entidade): cada peça é uma ficha com `base`/`fabric`/`scales` (ao menos um), `finish`, `wear`, `sheen`, `color`, `pattern` (texto livre) | `parts: {{cape: {{fabric: wool, weave: plain, drape: flowing, color: "#2850d2"}}}}` |
 | escamas | `parts` (entidade) | `parts: {{skin: {{scales: {{pattern: overlapping, size: medium, sheen: high, gradient: {{from: "#14502d", to: "#d4a528"}}, coverage: [back, tail]}}}}}}` |

@@ -17,7 +17,7 @@ from . import layout as L
 from . import vocab as V
 from .assertions import AssertSyntaxError, check_refs, parse_assert
 from .model import SLUG, Diagnostic, RefError, Scene, build_scene
-from . import character, fx, guides, lint, materials, palette as pal_layer
+from . import character, fx, guides, lint, materials, pose, palette as pal_layer
 from . import variants
 from . import verify as verify_mod
 from .negations import to_affirmation
@@ -32,7 +32,7 @@ REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
 ENTITY_KEYS = {
     "id", "kind", "label", "desc", "plane", "at", "size", "box", "orient",
     "brightness", "saturation", "tags", "details",
-    "wind_parts", "translucent", "material", "parts", "detail", "character",
+    "wind_parts", "translucent", "material", "parts", "detail", "character", "pose",
 }
 LIGHT_KEYS = {"role", "color", "source", "hits", "note"}
 CAMERA_KEYS = {"angle", "lens", "focus", "depth_blur"}
@@ -217,6 +217,7 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
     fx.check_atmosphere(c, data, scene)
     materials.check(c, data)
     character.check(c, data, scene)
+    pose.check(c, data, scene)
     _check_lock(c, data, scene)
     verify_mod.check(c, data)
     lint.check(c, data, scene)

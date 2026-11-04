@@ -154,6 +154,10 @@ PART_PT = {
     "plume": "a pluma", "ribbon": "a fita", "hood": "o capuz", "shield": "o escudo", "helmet": "o elmo",
     "skin": "a pele", "back": "o dorso", "chest": "o peito", "belly": "a barriga", "arms": "os braços", "legs": "as pernas",
     "head": "a cabeça", "neck": "o pescoço", "hands": "as mãos", "feet": "os pés", "wings": "as asas", "horns": "os chifres", "boots": "as botas", "gloves": "as luvas", "staff": "o cajado", "spear": "a lança",
+    "coat": "o casaco", "jacket": "a jaqueta", "tunic": "a túnica", "dress": "o vestido", "robe": "a túnica longa", "shirt": "a camisa",
+    "pants": "as calças", "belt": "o cinto", "bandana": "o lenço", "hat": "o chapéu", "bag": "a bolsa", "sleeves": "as mangas",
+    "veil": "o véu", "wings": "as asas", "beard": "a barba", "braids": "as tranças", "ponytail": "o rabo de cavalo", "bangs": "a franja",
+    "coattails": "as abas do casaco", "sash": "a faixa", "pennant": "a flâmula", "foam": "a espuma", "leaves": "as folhas", "smoke": "a fumaça",
 }
 
 

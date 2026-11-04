@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from . import character, fx, guides, materials
+from . import character, fx, guides, materials, pose
 from . import layout as L
 from . import palette as PAL
 from . import phrases as P
@@ -56,6 +56,12 @@ def priorities(scene: Scene) -> tuple[list[str], list[str]]:
     return out, reminders
 
 
+def entity_extras(scene: Scene, entity_id: str) -> list[str]:
+    """Frases de camadas (personagem, pose, material, vento) de uma entidade; vazio quando não há."""
+    fns = (character.sentence, pose.sentence, materials.entity_sentence, fx.wind_sentence)
+    return [t for t in (fn(scene, entity_id) for fn in fns) if t]
+
+
 def entity_sentence(scene: Scene, e: Entity) -> str:
     where = P.entity_position(e, scene.grid_kind)
     sep = ", " if where.startswith("com ") else " "
@@ -67,7 +73,7 @@ def entity_sentence(scene: Scene, e: Entity) -> str:
     elif e.brightness == "low" or e.saturation == "muted":
         parts.append("Permanece discreto: baixa saturação e brilho contido.")
     parts.extend(f"{d}." if not d.endswith(".") else d for d in e.details)
-    for extra in (character.sentence(scene, e.id), materials.entity_sentence(scene, e.id), fx.wind_sentence(scene, e.id)):
+    for extra in entity_extras(scene, e.id):
         if extra:
             parts.append(extra)
     return " ".join(parts)
@@ -261,9 +267,11 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
     style = d["style"]
     weights = {k: float(v) / 100.0 for k, v in (style.get("mix") or {}).items()}
     global_bits = [ir["estilo"], ir["quadro"], ir["grade"]]
-    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera"):
+    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera", "intencao", "iluminacao", "ordem_do_olhar",
+                "detalhes", "detalhe_de_textura", "manter_igual", "acabamento", "lembrete_final"):
         if key in ir:
-            global_bits.append(ir[key])
+            v = ir[key]
+            global_bits.append(" ".join(v) if isinstance(v, list) else v)
     regions = []
     for e in sorted(scene.entities, key=lambda e: V.PLANES.index(e.plane)):
         x, y, w, h = e.box
@@ -276,7 +284,8 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
             "box_px": [round(x * w_px), round(y * h_px), round(w * w_px), round(h * h_px)],
             "orient": e.orient,
             "weight": WEIGHT[e.brightness],
-            "prompt": e.desc + (f", orientação {V.DIRECTION_PT[e.orient]} ({P.SCREEN_NOTE})" if e.orient else ""),
+            "prompt": " ".join([e.desc + (f", orientação {V.DIRECTION_PT[e.orient]} ({P.SCREEN_NOTE})" if e.orient else "")]
+                               + entity_extras(scene, e.id)),
         })
     fx, fy = scene.focal_target().point
     out = {
