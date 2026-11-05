@@ -8,6 +8,14 @@ from . import fixes, normalize, plan as PL, primer as PR, templates
 from .validate import load_text
 
 
+def plain(o):   # json.dumps(default=plain): numpy (bool_/float64/int64) e afins viram tipos JSON
+    if hasattr(o, "item"):
+        return o.item()
+    if hasattr(o, "tolist"):
+        return o.tolist()
+    return str(o)
+
+
 def _result(diags, scene, notes) -> dict:
     errs = [d.to_dict() for d in diags if d.level == "error"]
     return {"ok": scene is not None and not errs, "errors": errs,
@@ -63,3 +71,143 @@ def vocab() -> dict:
 
 def new(template: str) -> str:
     return templates.get(template)
+
+
+# --- ferramentas com arquivos/imagens (usadas pelo servidor MCP) -------------------------------------------------
+
+def _scene(text: str):
+    diags, scene, _ = load_text(text)
+    errs = [d.to_dict() for d in diags if d.level == "error"]
+    return scene, ({"ok": False, "errors": errs} if scene is None else None)
+
+
+def loss_report(text: str, target: str = "prose") -> dict:
+    from . import loss as LS
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    items = LS.report(scene, target)
+    return {"ok": True, "target": target, "items": [str(i) for i in items], "blocking": bool(LS.blocking(items))}
+
+
+def check_layout(text: str) -> dict:
+    from .assertions import evaluate_all
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    res = evaluate_all(scene)
+    return {"ok": all(r.ok for r in res), "asserts": [{"assert": r.raw, "ok": r.ok, "detail": r.detail} for r in res]}
+
+
+def render_schema(text: str, out_dir: str, width: int = 960) -> dict:
+    from .render import write_render
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    return {"ok": True, "files": [str(p) for p in write_render(scene, out_dir, width)]}
+
+
+def pack_files(text: str, out_dir: str, only: str | None = None, guide_style: str = "blocks", width: int = 1024) -> dict:
+    from . import pack as PK
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    files = PK.pack(scene, text, out_dir, only, None, width, guide_style)
+    prompt = next((p.read_text(encoding="utf-8") for p in files if p.name == "prompt.txt"), None)
+    return {"ok": True, "files": [str(p) for p in files], "prompt": prompt}
+
+
+def pose_sheet(text: str, entity: str, out_path: str, style: str = "mannequin") -> dict:
+    from . import render as R, skeleton
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    raw = next((e for e in scene.data["entities"] if e.get("id") == entity), None)
+    if raw is None or not isinstance(raw.get("pose"), dict):
+        return {"ok": False, "errors": [{"message": f"a entidade {entity!r} não existe ou não tem `pose`"}]}
+    svg = skeleton.sheet_svg(raw["pose"], entity) if style == "construction" else skeleton.reference_svg(raw["pose"])
+    return {"ok": True, "files": [str(p) for p in R.write_svg_text(svg, out_path)]}
+
+
+def correct_round(text: str, image_path: str, out_dir: str, boxes: dict | None = None) -> dict:
+    """Mede a imagem e devolve achados, a cena corrigida e o prompt da próxima rodada (grava relatorio.json etc.)."""
+    import json
+    from pathlib import Path
+
+    from PIL import Image
+
+    from . import correct as CR
+    from .compile import to_prose
+    from .evalform import dump_scene
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    findings, items = CR.measure(scene, Image.open(image_path), boxes)
+    if not findings:
+        return {"ok": False, "errors": [{"message": "nada a medir: declare `verify`, `signature` nas entidades ou informe `boxes`"}]}
+    new, corr = CR.next_scene(scene, findings, items, Path(image_path).name)
+    new_text = dump_scene(new)
+    diags, ok_scene, _ = load_text(new_text)
+    if ok_scene is None:
+        return {"ok": False, "errors": [d.to_dict() for d in diags if d.level == "error"]}
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    rel = CR.report(scene, findings, items, Path(image_path).name)
+    (out / "relatorio.json").write_text(json.dumps(rel, ensure_ascii=False, indent=2, default=plain), encoding="utf-8")
+    (out / "cena.next.yaml").write_text(new_text, encoding="utf-8")
+    prompt_next = to_prose(ok_scene)
+    (out / "prompt_next.txt").write_text(prompt_next, encoding="utf-8")
+    return {"ok": True, "all_met": all(f.ok for f in findings),
+            "findings": [{"kind": f.kind, "check": f.check, "ok": f.ok, "detail": f.detail} for f in findings],
+            "corrections": corr, "next_scene": new_text, "prompt_next": prompt_next, "files": [str(out / n) for n in ("relatorio.json", "cena.next.yaml", "prompt_next.txt")]}
+
+
+def locate_image(text: str, image_path: str, boxes: dict | None = None) -> dict:
+    from PIL import Image
+
+    from . import locate as LC
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    img = Image.open(image_path)
+    measured, source = {}, {}
+    for k, v in LC.locate_by_signature(scene, img).items():
+        measured[k], source[k] = v, "assinatura"
+    for k, v in (boxes or {}).items():
+        if v is not None and k in scene.by_id:
+            measured[k], source[k] = tuple(v), "informada"
+    items = LC.compare(scene, measured, source)
+    items = [i for i in items if not (i.source == "assinatura" and not LC.reliable(i.declared, i.measured))]
+    if not items:
+        return {"ok": False, "errors": [{"message": "nenhuma entidade localizada: declare `signature` ou informe `boxes` [x,y,w,h] normalizadas"}]}
+    verdict, detail = LC.mirror_verdict(items)
+    res, skipped = LC.recheck_asserts(scene, {i.id: i.measured for i in items})
+    return {"ok": verdict != "espelhada" and all(r.ok for r in res), "mirror": verdict, "mirror_detail": detail,
+            "entities": [{"id": i.id, "declared": list(i.declared), "measured": list(i.measured), "iou": LC.iou(i.declared, i.measured), "source": i.source} for i in items],
+            "asserts": [{"assert": r.raw, "ok": r.ok, "detail": r.detail} for r in res], "skipped_asserts": skipped}
+
+
+def locate_form(text: str) -> dict:
+    from . import locate as LC
+
+    scene, err = _scene(text)
+    return err or {"ok": True, "form": LC.form(scene)}
+
+
+def verify_image(text: str, image_path: str) -> dict:
+    from PIL import Image
+
+    from . import verify as ver
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    res = ver.run(scene, Image.open(image_path))
+    return {"ok": all(r.ok for r in res), "results": [{"verify": r.raw, "ok": r.ok, "detail": r.detail, "score": r.score} for r in res]}

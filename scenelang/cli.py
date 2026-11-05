@@ -289,7 +289,7 @@ def cmd_correct(a) -> int:
     new, corr = CR.next_scene(scene, findings, items, Path(a.image).name)
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name), ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     from .evalform import dump_scene
 
     new_text = dump_scene(new)

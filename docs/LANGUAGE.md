@@ -127,3 +127,20 @@ Formas curtas aceitas (e registradas em `defaults_applied` na API): `canvas: "16
 ## Medir e pós-processar (v0.3)
 
 `snap` (grade real, limite de cores, paleta exata, encaixe nas guias, fundo transparente), `sheet-prompt`/`sheet-measure` (variantes lado a lado, medidas por coluna), `verify symmetric(vertical, 0.8, legs)` (só pernas, ignora capa/cabelo ao vento) e avisos de contradição (paleta × descrição, simetria × vento, margem × sujeito).
+
+## Servidor MCP e skill (v0.6)
+
+`scenelang-mcp` é um servidor MCP (stdio) que expõe as mesmas operações da CLI como ferramentas
+(`scenelang_primer`, `_new`, `_validate`, `_check_layout`, `_render_schema`, `_pose_sheet`, `_compile`, `_pack`, `_locate`, `_verify`, `_measure`).
+O modelo escreve a cena em YAML e chama as ferramentas; os arquivos vão para `out_dir` e os caminhos voltam no resultado.
+A skill em `skill/scenelang/SKILL.md` ensina o fluxo e quando entregar cada arquivo.
+
+Instalação: `pip install "scenelang[mcp] @ git+https://github.com/Nycollas047/scenelang-linguagem-de-cena-"`.
+
+Configuração (Claude Desktop, Claude Code, Cursor, etc.):
+
+```json
+{"mcpServers": {"scenelang": {"command": "scenelang-mcp"}}}
+```
+
+Claude Code: `claude mcp add scenelang -- scenelang-mcp`.

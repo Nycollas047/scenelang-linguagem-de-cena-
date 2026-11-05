@@ -4,17 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scenelang"
-version = "0.5.0"
+version = "0.6.0"
 description = "Linguagem de cena para modelos de geração de imagem: cena (YAML) -> validação -> prompt compilado -> verificação"
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6"]
 
 [project.optional-dependencies]
 image = ["pillow>=10", "numpy>=1.26"]
+mcp = ["mcp>=1.2", "pillow>=10", "numpy>=1.26"]
 dev = ["pytest", "pillow>=10", "numpy>=1.26"]
 
 [project.scripts]
 scenelang = "scenelang.cli:main"
+scenelang-mcp = "scenelang.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["scenelang*"]
