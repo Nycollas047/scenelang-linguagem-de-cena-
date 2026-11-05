@@ -97,7 +97,7 @@ def test_skeleton_cotovelo_dobrado_aproxima_punho_do_ombro():
 def test_render_desenha_esqueleto():
     d, scene, _ = load_text(SCENE.replace("kind: prop\n    label: a bola vermelha", "kind: character\n    label: a bola vermelha")
                             .replace("    signature: [\"#d00000\"]", "    pose: {joints: {right_elbow: 90}}"))
-    assert 'class="pose"' in render_svg(scene)
+    assert 'class="pose solids"' in render_svg(scene)
 
 
 def test_solidos_tem_caixas_cilindros_e_legenda():
