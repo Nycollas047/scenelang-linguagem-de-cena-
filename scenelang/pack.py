@@ -20,11 +20,15 @@ from .compile import to_prose
 
 SKIP_KINDS = {"sky", "terrain"}
 PLANE_FILL = {"background": ("#c9d1f2", "#8fa0e0"), "midground": ("#bfe3df", "#6cc0b7"), "foreground": ("#f3d9b0", "#e0a24a")}
-GUIDE_PREFACE = ("A imagem anexa é só um guia de composição: os retângulos mostram onde cada elemento fica no quadro e o manequim cinza "
-                 "mostra a pose. Não copie as cores, as formas cinzas nem os traços do guia; recrie tudo no estilo descrito abaixo.\n\n")
+GUIDE_PREFACE = ("A imagem anexa é só um guia de composição: as áreas coloridas mostram onde cada elemento fica no quadro e o manequim cinza "
+                 "mostra a pose. A imagem final é uma ilustração completa, sem molduras, retângulos, áreas coloridas, manequim nem texto "
+                 "do guia, e inteiramente no estilo descrito abaixo. O texto abaixo manda: cada elemento é exatamente o descrito, "
+                 "sem elementos extras.\n\n")
+SEG_COLORS = ["#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080"]
 
 
-def guide_svg(scene, width: int = 1024, labels: bool = False) -> tuple[str, int, int]:
+def guide_svg(scene, width: int = 1024, labels: bool = False, style: str = "blocks") -> tuple[str, int, int]:
+    """style: blocks (retângulos translúcidos com borda) | seg (mapa de segmentação: áreas chapadas, sem borda, uma cor por elemento)."""
     ratio = scene.ratio if isinstance(scene.ratio, (int, float)) else scene.ratio[0] / scene.ratio[1]
     W, H = width, round(width / ratio)
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="DejaVu Sans, sans-serif">',
@@ -33,8 +37,12 @@ def guide_svg(scene, width: int = 1024, labels: bool = False) -> tuple[str, int,
         for e in [e for e in scene.entities if e.plane == plane and e.kind not in SKIP_KINDS]:
             x, y, w, h = e.box
             fill, stroke = PLANE_FILL[plane]
-            o.append(f'<rect x="{x * W:.1f}" y="{y * H:.1f}" width="{w * W:.1f}" height="{h * H:.1f}" rx="10" fill="{fill}" '
-                     f'fill-opacity="0.55" stroke="{stroke}" stroke-width="2"/>')
+            if style == "seg":
+                col = SEG_COLORS[[x_.id for x_ in scene.entities].index(e.id) % len(SEG_COLORS)]
+                o.append(f'<rect x="{x * W:.1f}" y="{y * H:.1f}" width="{w * W:.1f}" height="{h * H:.1f}" fill="{col}"/>')
+            else:
+                o.append(f'<rect x="{x * W:.1f}" y="{y * H:.1f}" width="{w * W:.1f}" height="{h * H:.1f}" rx="10" fill="{fill}" '
+                         f'fill-opacity="0.55" stroke="{stroke}" stroke-width="2"/>')
             raw = next((r for r in scene.data["entities"] if r.get("id") == e.id), {})
             if isinstance(raw.get("pose"), dict):
                 o.append(skeleton.mannequin_svg(raw["pose"], (x * W, y * H, w * W, h * H)))
@@ -75,7 +83,8 @@ def _metadata(scene, prompt: str, scene_text: str):
     return meta
 
 
-def pack(scene, scene_text: str, out_dir: str | Path, only: str | None = None, labels: bool | None = None, width: int = 1024) -> list[Path]:
+def pack(scene, scene_text: str, out_dir: str | Path, only: str | None = None, labels: bool | None = None, width: int = 1024,
+         style: str = "blocks") -> list[Path]:
     from PIL import Image, ImageDraw
 
     out = Path(out_dir)
@@ -93,7 +102,7 @@ def pack(scene, scene_text: str, out_dir: str | Path, only: str | None = None, l
         w("prompt.txt", prompt)
     if labels is None:   # sem texto no guia quando a imagem vai sozinha ao gerador; com nomes quando o guia e o prompt viajam juntos
         labels = only == "single"
-    svg, W, H = guide_svg(scene, width, labels)
+    svg, W, H = guide_svg(scene, width, labels, style)
     guide_png = out / "guia.png"
     if only in (None, "guide", "single"):
         _png(svg, guide_png)

@@ -311,7 +311,7 @@ def cmd_pack(a) -> int:
 
     scene, _ = _load(a.scene)
     text = Path(a.scene).read_text(encoding="utf-8")
-    for p in PK.pack(scene, text, a.out_dir, a.only, a.labels, a.width):
+    for p in PK.pack(scene, text, a.out_dir, a.only, a.labels, a.width, a.guide_style):
         print(f"gravado: {p}")
     return 0
 
@@ -508,6 +508,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--labels", action=argparse.BooleanOptionalAction, default=None,
                    help="escreve o nome de cada elemento no guia (padrão: sim em --only single, não nos demais)")
     s.add_argument("--width", type=int, default=1024)
+    s.add_argument("--guide-style", choices=["blocks", "seg"], default="blocks",
+                   help="blocks: retângulos com borda; seg: mapa de segmentação (áreas chapadas, sem borda), para geradores com controle de estrutura")
     s.set_defaults(fn=cmd_pack)
 
     s = sub.add_parser("unpack", help="lê prompt/cena embutidos nos metadados de um PNG gerado por `pack`")

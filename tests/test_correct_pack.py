@@ -116,3 +116,9 @@ def test_guia_nao_tem_rotulos_por_padrao_e_so_desenha_figura_com_pose():
     svg, _, _ = PK.guide_svg(load())
     assert "<text" not in svg and svg.count('class="pose mannequin"') == 1
     assert "a bola vermelha" in PK.guide_svg(load(), labels=True)[0]
+
+
+def test_guia_seg_nao_tem_borda_nem_texto_e_o_prompt_proibe_vazar_o_guia():
+    svg, _, _ = PK.guide_svg(load(), style="seg")
+    assert "stroke=" not in svg.split("<g")[0] and "<text" not in svg
+    assert "sem molduras" in PK.GUIDE_PREFACE and "sem elementos extras" in PK.GUIDE_PREFACE
