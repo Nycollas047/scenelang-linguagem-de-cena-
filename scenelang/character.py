@@ -80,15 +80,43 @@ def skin_rgb(skin: dict, data: dict):
     return None
 
 
+def _rgb_or_name(v, data):
+    if isinstance(v, str):
+        rgb = C.name_to_rgb(v.replace("_", "-"))
+        if rgb is not None:
+            return rgb
+    try:
+        return PAL.resolve_spec(data, v)
+    except C.ColorError:
+        return None
+
+
 def skin_colors(data: dict) -> dict[str, tuple[int, int, int]]:
-    """Cores de pele declaradas nas entidades (para a escolha da chave e para os avisos)."""
+    """Cores do corpo declaradas nas entidades (pele, cabelo, olhos, pelos do rosto) e `signature`.
+
+    Alimenta a escolha da chave de recorte e os avisos de vazamento: a chave não pode se parecer com nenhuma delas.
+    """
     out = {}
     for e in data.get("entities") or []:
-        ch = e.get("character") if isinstance(e, dict) else None
+        if not isinstance(e, dict):
+            continue
+        eid = e.get("id")
+        ch = e.get("character")
         if isinstance(ch, dict):
             rgb = skin_rgb(ch.get("skin"), data)
             if rgb:
-                out[f"pele de {e.get('id')}"] = rgb
+                out[f"pele de {eid}"] = rgb
+            for key, label in (("hair", "cabelo"), ("eyes", "olhos"), ("facial_hair", "pelos do rosto")):
+                sub = ch.get(key)
+                if isinstance(sub, dict) and "color" in sub:
+                    rgb = _rgb_or_name(sub["color"], data)
+                    if rgb:
+                        out[f"{label} de {eid}"] = rgb
+        sig = e.get("signature")
+        for j, v in enumerate(sig if isinstance(sig, list) else [sig] if sig else []):
+            rgb = _rgb_or_name(v, data)
+            if rgb:
+                out[f"assinatura {j + 1} de {eid}"] = rgb
     return out
 
 

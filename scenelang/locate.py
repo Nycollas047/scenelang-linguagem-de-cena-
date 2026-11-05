@@ -92,7 +92,9 @@ def locate_by_signature(scene, image) -> dict[str, tuple]:
         if sel.sum() / sel.size < MIN_AREA:
             continue
         ys, xs = np.where(sel)
-        x0, x1, y0, y1 = xs.min() / f.W, (xs.max() + 1) / f.W, ys.min() / f.H, (ys.max() + 1) / f.H
+        # percentis 1–99: um pixel solto longe do personagem não estica a caixa
+        x0, x1 = np.percentile(xs, 1) / f.W, (np.percentile(xs, 99) + 1) / f.W
+        y0, y1 = np.percentile(ys, 1) / f.H, (np.percentile(ys, 99) + 1) / f.H
         found[e.id] = (round(x0, 4), round(y0, 4), round(x1 - x0, 4), round(y1 - y0, 4))
     return found
 

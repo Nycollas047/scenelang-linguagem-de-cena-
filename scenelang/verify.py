@@ -24,7 +24,7 @@ from .checks import is_num, suggest
 
 NAMES = ("max_colors", "grid_aligned", "symmetric", "fit_guides", "palette_match", "chroma_clean", "no_spill", "margin")
 ARITY = {"max_colors": (1, 1), "grid_aligned": (0, 2), "symmetric": (1, 3), "fit_guides": (0, 1),
-         "palette_match": (1, 2), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1)}
+         "palette_match": (1, 3), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1)}
 CALL = re.compile(r"^\s*([a-z_]+)\s*\((.*)\)\s*$")
 
 
@@ -70,7 +70,17 @@ def parse(raw: str) -> Check:
             args.insert(1, 0.8)
         if len(args) == 3 and args[2] != "legs":
             raise VerifySyntaxError("o terceiro argumento de symmetric só pode ser 'legs'")
-    nums = [a for a in (args[1:] if name == "symmetric" else args) if a != "legs"]
+    if name == "palette_match" and len(args) == 3:
+        ent = args.pop()
+        if not isinstance(ent, str):
+            raise VerifySyntaxError("o terceiro argumento de palette_match é o id de uma entidade: palette_match(10, 0.9, pirate)")
+        args.append(ent)
+    if name == "symmetric":
+        nums = [a for a in args[1:] if a != "legs"]
+    elif name == "palette_match":
+        nums = args[:2]
+    else:
+        nums = args
     if not all(is_num(a) and a > 0 for a in nums):
         raise VerifySyntaxError(f"os argumentos numéricos de {name} devem ser positivos: {raw!r}")
     return Check(name, args, raw)
@@ -101,6 +111,10 @@ def check(c, data: dict) -> None:
             c.error(p, f"{ck.name} exige background.mode: chromakey", got=raw)
         if ck.name == "palette_match" and not data.get("palette"):
             c.error(p, "palette_match exige a camada palette", got=raw)
+        if ck.name == "palette_match" and len(ck.args) == 3:
+            ids = [e.get("id") for e in data.get("entities") or [] if isinstance(e, dict)]
+            if ck.args[2] not in ids:
+                c.error(p, f"entidade desconhecida em palette_match: {ck.args[2]!r}", got=raw, accepted=ids)
 
 
 # ---------------------------------------------------------------------------
@@ -248,13 +262,20 @@ def v_palette_match(f: Frame, a: list) -> Result:
     if not pal:
         return Result(f"palette_match({de:g})", False, "a paleta não tem cores exatas (rode plan-apply com a proposta do modelo)")
     labs = np.array([C.to_lab(c) for c in pal])
-    px = f.lab[f.fg]
+    mask, scope = f.fg, "do sujeito"
+    if len(a) == 3:
+        ent = f.scene.by_id[a[2]]
+        x, y, w, h = ent.box
+        box = np.zeros_like(f.fg)
+        box[int(y * f.H):int(np.ceil((y + h) * f.H)), int(x * f.W):int(np.ceil((x + w) * f.W))] = True
+        mask, scope = f.fg & box, f"de {a[2]} (dentro da caixa declarada)"
+    px = f.lab[mask]
     if len(px) == 0:
-        return Result(f"palette_match({de:g})", False, "nenhum sujeito encontrado")
+        return Result(f"palette_match({de:g})", False, f"nenhum pixel {scope} encontrado")
     sample = px[:: max(1, len(px) // 20000)]
     dist = np.min(np.linalg.norm(sample[:, None, :] - labs[None], axis=-1), axis=1)
     score = float((dist <= de).mean())
-    return Result(f"palette_match({de:g})", score >= need, f"{score:.1%} dos pixels do sujeito a ΔE ≤ {de:g} da paleta (mínimo {need:.0%})", score)
+    return Result(f"palette_match({de:g})", score >= need, f"{score:.1%} dos pixels {scope} a ΔE ≤ {de:g} da paleta (mínimo {need:.0%})", score)
 
 
 def v_chroma_clean(f: Frame, a: list) -> Result:

@@ -89,3 +89,22 @@ def test_regioes_nao_perdem_intencao_nem_acabamento():
     _, scene, _ = load_text((BASE % "").replace("asserts:", 'finish: "luz volumétrica"\nasserts:'))
     g = json.loads(to_regions(scene))["global_prompt"]
     assert "uma heroína" in g and "luz volumétrica" in g
+
+
+def test_chave_de_recorte_evita_cor_do_cabelo():
+    from scenelang import fx
+    from scenelang.palette import reference_colors
+
+    diags, scene, _ = load("    character: {hair: {color: '#00ff00'}}\n")
+    assert (0, 255, 0) in reference_colors(scene.data)
+    assert fx.pick_key(scene.data) != (0, 255, 0)
+
+
+def test_palette_match_por_entidade_valida_id():
+    from scenelang.verify import parse
+
+    assert parse("palette_match(10, 0.9, hero)").args == [10, 0.9, "hero"]
+    d = BASE % ""
+    d = d.replace("asserts:", "palette:\n  mode: fixed\n  colors: {a: '#ff0000', b: '#00ff00'}\nverify:\n  - palette_match(10, 0.9, nobody)\nasserts:")
+    diags, _, _ = load_text(d)
+    assert any("entidade desconhecida" in x.message for x in diags)
