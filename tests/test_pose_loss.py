@@ -108,3 +108,36 @@ def test_palette_match_por_entidade_valida_id():
     d = d.replace("asserts:", "palette:\n  mode: fixed\n  colors: {a: '#ff0000', b: '#00ff00'}\nverify:\n  - palette_match(10, 0.9, nobody)\nasserts:")
     diags, _, _ = load_text(d)
     assert any("entidade desconhecida" in x.message for x in diags)
+
+
+@pytest.mark.parametrize("nome,canon", [("Right_Elbow", "right_elbow"), ("right-elbow", "right_elbow"), ("elbow right", "right_elbow"),
+                                         ("cotovelo direito", "right_elbow"), ("joelho_esquerdo", "left_knee"), ("pescoço", "neck")])
+def test_junta_com_variacao_vira_fix_de_rename(nome, canon):
+    from scenelang import api
+
+    text = (BASE % f'    pose: {{joints: {{"{nome}": 40}}}}')
+    diags, _, _ = load_text(text)
+    e = [d for d in diags if d.level == "error"]
+    assert len(e) == 1 and e[0].fix == {"path": e[0].path, "rename": canon}
+    assert api.fix(text)["ok"]
+
+
+def test_giro_do_rosto_e_aviso_de_costas():
+    from scenelang.pose import head_yaw
+
+    assert head_yaw({"body_yaw": 150, "joints": {"neck": {"turn": 70}}}) == 80
+    assert head_yaw({"body_yaw": 150, "joints": {"neck": {"turn": -70}}}) == -140
+    diags, scene, _ = load("    pose:\n      body_yaw: 150\n      joints: {neck: {turn: -70}}")
+    assert any("rosto" in d.message for d in diags if d.level == "warning")
+    diags, scene, _ = load("    pose:\n      body_yaw: 150\n      joints: {neck: {turn: 70}}")
+    assert not any("rosto não aparece" in d.message for d in diags)
+    assert "rosto" in to_prose(scene) and "perfil" in to_prose(scene)
+
+
+def test_fix_guarda_copia_do_original(tmp_path):
+    from scenelang.cli import main
+
+    f = tmp_path / "c.yaml"
+    f.write_text((BASE % '    pose: {joints: {right_elbow: 175}}'), encoding="utf-8")
+    main(["validate", str(f), "--fix"])
+    assert (tmp_path / "c.yaml.bak").read_text(encoding="utf-8").count("175") == 1

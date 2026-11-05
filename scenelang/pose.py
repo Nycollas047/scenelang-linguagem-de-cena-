@@ -24,6 +24,8 @@ Convenções (neutro = 0° = anatomia relaxada, em pé, braços ao lado do corpo
 """
 from __future__ import annotations
 
+import re
+
 from .checks import closest, is_num, unknown_keys
 
 # junta -> eixo -> (mín, máx, rótulo). Faixas de movimento típicas de adulto (valores ativos, arredondados).
@@ -64,6 +66,39 @@ AXIS_PT = {
 HINGE_PT = {"elbow": "dobrado", "knee": "dobrado"}
 HAND_FOOT = {"left_hand": "a mão esquerda", "right_hand": "a mão direita", "left_foot": "o pé esquerdo", "right_foot": "o pé direito"}
 POSE_KEYS = {"body_yaw", "joints", "hold"}
+
+
+_PT_JOINT = {"cotovelo": "elbow", "joelho": "knee", "ombro": "shoulder", "quadril": "hip", "pulso": "wrist", "punho": "wrist",
+             "tornozelo": "ankle", "pescoco": "neck", "coluna": "spine", "tronco": "spine", "direito": "right", "direita": "right",
+             "esquerdo": "left", "esquerda": "left", "elbow": "elbow", "knee": "knee", "shoulder": "shoulder", "hip": "hip",
+             "wrist": "wrist", "ankle": "ankle", "neck": "neck", "spine": "spine", "right": "right", "left": "left"}
+_PT_AXIS = {"flexao": "flex", "giro": "turn", "rotacao": "rotate", "abducao": "abduct", "inclinacao": "tilt", "torcao": "twist", "lado": "side"}
+
+
+def _plain(text: str) -> str:
+    import unicodedata
+
+    t = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[\s\-\.]+", "_", t.strip())
+
+
+def canon_joint(name) -> str | None:
+    """Nome canônico da junta a partir de variações (caixa, hífen, espaço, ordem, português). None se não reconhece."""
+    toks = [t for t in _plain(name).split("_") if t and t not in ("do", "da", "de")]
+    mapped = [_PT_JOINT.get(t) for t in toks]
+    if not toks or None in mapped:
+        return None
+    sides = [m for m in mapped if m in ("left", "right")]
+    base = [m for m in mapped if m not in ("left", "right")]
+    if len(base) != 1 or len(sides) > 1:
+        return None
+    cand = f"{sides[0]}_{base[0]}" if sides else base[0]
+    return cand if cand in JOINTS else None
+
+
+def canon_axis(name) -> str | None:
+    t = _plain(name)
+    return t if t in {a for ax in JOINTS.values() for a in ax} else _PT_AXIS.get(t)
 
 
 def split(joint: str) -> tuple[str | None, str]:
@@ -111,8 +146,11 @@ def check(c, data: dict, scene) -> None:
         for name, raw in (joints or {}).items():
             jp = f"{p}.joints.{name}"
             if name not in JOINTS:
+                canon = canon_joint(name)
+                near = canon or closest(name, list(JOINTS))
                 c.error(jp, "junta desconhecida", got=name, accepted=sorted(JOINTS),
-                        hint=f"junta mais parecida: {closest(name, list(JOINTS))}" if closest(name, list(JOINTS)) else None)
+                        hint=f"junta mais parecida: {near}" if near else None,
+                        fix={"path": jp, "rename": canon} if canon and canon not in joints else None)
                 continue
             val = normalize_joint(raw, name)
             if val is None:
@@ -122,7 +160,9 @@ def check(c, data: dict, scene) -> None:
             for ax, deg in val.items():
                 ap = f"{jp}.{ax}"
                 if ax not in axes:
-                    c.error(ap, "eixo inexistente nesta junta", got=ax, accepted=sorted(axes))
+                    alt = canon_axis(ax)
+                    c.error(ap, "eixo inexistente nesta junta", got=ax, accepted=sorted(axes),
+                            fix={"path": ap, "rename": alt} if alt in axes and alt not in val else None)
                     continue
                 if not is_num(deg):
                     c.error(ap, "deve ser um número em graus", got=deg)
@@ -153,14 +193,21 @@ def _deg(joints: dict, joint: str, axis: str) -> float | None:
     return v.get(axis) if isinstance(v, dict) and is_num(v.get(axis)) else None
 
 
+def head_yaw(po: dict) -> float | None:
+    """Giro do rosto na imagem: giro do corpo menos o giro do pescoço (turn positivo é para a direita do personagem)."""
+    yaw = po.get("body_yaw")
+    if not is_num(yaw) or isinstance(yaw, bool):
+        return None
+    neck = _deg(po.get("joints") or {}, "neck", "turn") or 0.0
+    return (yaw - neck + 180) % 360 - 180
+
+
 def _coherence(c, p: str, po: dict, joints: dict) -> None:
     """Combinações possíveis em cada junta, mas improváveis juntas."""
-    neck = _deg(joints, "neck", "turn")
-    yaw = po.get("body_yaw")
-    # cabeça + corpo viram juntos: soma passa de ~150° de giro de cabeça em relação à câmera é raro mas possível;
-    # o erro típico é pedir "rosto visível" com corpo de costas e pescoço quase neutro.
-    if is_num(yaw) and neck is not None and abs(yaw) >= 150 and abs(neck) < 50:
-        c.warn(f"{p}", "corpo de costas (body_yaw ≥ 150) e pescoço quase neutro: o rosto não aparece", hint="gire o pescoço (turn) 60° ou mais para ver o rosto")
+    hy = head_yaw(po)
+    if hy is not None and abs(hy) >= 120:
+        c.warn(p, f"o rosto fica de costas para a câmera (giro do rosto {hy:g}°): o rosto não aparece",
+               hint="gire o pescoço (turn) para o lado do corpo até o rosto ficar abaixo de 120° (turn positivo = direita do personagem)")
     for side in ("left", "right"):
         hip, knee = _deg(joints, f"{side}_hip", "flex"), _deg(joints, f"{side}_knee", "flex")
         if hip is not None and knee is not None and hip < 0 and knee > 90:
@@ -211,6 +258,9 @@ def sentence(scene, entity_id: str) -> str | None:
     out = []
     if is_num(po.get("body_yaw")):
         out.append(f"{_yaw_phrase(po['body_yaw'])} (giro de {po['body_yaw']:g}°)")
+        hy = head_yaw(po)
+        if hy is not None and _deg(po.get("joints") or {}, "neck", "turn"):
+            out.append("rosto " + _yaw_phrase(hy).replace("corpo ", "", 1).replace("em três quartos", "em três quartos").strip())
     for name, val in (po.get("joints") or {}).items():
         axes = normalize_joint(val, name) if name in JOINTS else None
         if axes:

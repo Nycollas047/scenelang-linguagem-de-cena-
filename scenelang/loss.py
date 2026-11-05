@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from . import vocab as V
 
-_KNOWN_PT = {v.split(" ", 1)[1] for v in V.PART_PT.values()}
+_KNOWN_PT = {v.split(" ", 1)[-1] for v in V.PART_PT.values()}
 
 
 @dataclass

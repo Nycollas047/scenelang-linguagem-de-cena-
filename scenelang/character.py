@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from . import color as C
 from . import palette as PAL
-from .checks import enum_check, is_num, unknown_keys
+from .checks import enum_check, unknown_keys
 
 CHAR_KEYS = {"age_group", "heritage", "skin", "hair", "eyes", "face", "body", "features", "facial_hair"}
 FACIAL_TYPES = {"beard": "barba", "mustache": "bigode", "stubble": "barba por fazer", "goatee": "cavanhaque", "sideburns": "costeletas",

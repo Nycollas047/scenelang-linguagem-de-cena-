@@ -40,7 +40,10 @@ def cmd_validate(a) -> int:
             print(f"gravado: {a.out}", file=sys.stderr)
             a.scene = a.out
         else:
-            Path(a.scene).write_text(res["text"], encoding="utf-8")   # sobrescreve só com --fix explícito
+            bak = Path(a.scene).with_suffix(Path(a.scene).suffix + ".bak")   # a regravação perde comentários: guarda o original
+            bak.write_text(text, encoding="utf-8")
+            print(f"cópia do original: {bak}", file=sys.stderr)
+            Path(a.scene).write_text(res["text"], encoding="utf-8")
             print(f"gravado: {a.scene}", file=sys.stderr)
     diags, scene, _ = load_file(a.scene)
     if a.json:

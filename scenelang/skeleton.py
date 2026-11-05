@@ -139,7 +139,6 @@ def solids_svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
     O cilindro mostra a elipse mais ABERTA quando aponta para a câmera (|eixo·z| grande)."""
     x, y, w, h = box_px
     P = points(pose)
-    yaw = math.radians(pose.get("body_yaw", 0) or 0)
     rs, ls, hp, nk = P["right_shoulder"], P["left_shoulder"], P["hip"], P["neck"]
     up = _norm(_sub(nk, hp))
     rt = _norm(_sub(ls, rs))
@@ -186,7 +185,7 @@ def solids_svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
         for (px_, py_), r, front in (((ax, ay), ra, u[2] < 0), ((bx, by), rb, u[2] >= 0)):
             ry_ = max(r * k * open_, 0.8)
             dash = "" if front else ' stroke-dasharray="3 3"'
-            o.append(f'<ellipse cx="{px_:.1f}" cy="{py_:.1f}" rx="{max(r * k * 0.0 + ry_, 0.8):.1f}" ry="{r * k:.1f}" '
+            o.append(f'<ellipse cx="{px_:.1f}" cy="{py_:.1f}" rx="{ry_:.1f}" ry="{r * k:.1f}" '
                      f'transform="rotate({ang:.1f} {px_:.1f} {py_:.1f})" fill="#fff" fill-opacity="0.5" stroke="{col}" stroke-width="1.6"{dash}/>')
         return "".join(o)
 
@@ -205,7 +204,6 @@ def solids_svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
         for a, b in edges:
             back = (pts[a][2] + pts[b][2]) / 2 < zc - 1e-9
             o.append(line(pts[a], pts[b], col, 1.8, dash=back))
-        o.insert(0, "".join(f'<!--box-->'))
         # face de trás/atrás preenchida de leve para dar volume
         poly = [pts[(i, j, m)] for (i, j, m) in ((0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1))]
         pts2 = " ".join(f"{xy(p)[0]:.1f},{xy(p)[1]:.1f}" for p in poly)
@@ -233,7 +231,6 @@ def solids_svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
 
     # tronco e pélvis: caixas paralelas (mesmos eixos), como no desenho de construção
     tor_c = _mid(hp, nk)
-    tor_c = tuple(tor_c[t] + up[t] * 0.0 for t in range(3))
     add(tor_c[2], box(tor_c, (rt, up, fw), (SHOULDER * 2 * 0.95, TORSO * 0.62, 0.085), CORE_COL))
     pel_c = tuple(hp[t] - up[t] * 0.02 for t in range(3))
     add(pel_c[2] - 0.001, box(pel_c, (rt, up, fw), (HIP * 2 * 1.25, 0.075, 0.075), CORE_COL))
@@ -241,7 +238,6 @@ def solids_svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
     head = P["head"]
     add(nk[2] - 0.001, cylinder(nk, tuple(nk[t] + (head[t] - nk[t]) * 0.8 for t in range(3)), 0.016, 0.016, CORE_COL))
     hx, hy = xy(head)
-    hup = _norm(_sub(head, nk))
     hang = math.degrees(math.atan2(-(xy(head)[1] - xy(nk)[1]), xy(head)[0] - xy(nk)[0])) - 90
     nose = P["nose"]
     add(head[2], f'<ellipse cx="{hx:.1f}" cy="{hy:.1f}" rx="{HEAD_R * 0.85 * k:.1f}" ry="{HEAD_R * 1.12 * k:.1f}" '
