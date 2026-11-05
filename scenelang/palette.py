@@ -206,7 +206,12 @@ def sentence(data: dict) -> str | None:
     fixed, prop = fixed_colors(data), proposal_colors(data)
     bits = []
     if fixed:
-        bits.append("cores fixas: " + ", ".join(_label(r, rgb) for r, rgb in fixed.items()))
+        labels = {r: _label(r, rgb) for r, rgb in fixed.items()}
+        names = {r: l.split(" (#")[0] for r, l in labels.items()}
+        for r, lab in labels.items():   # nomes repetidos ("verde" duas vezes) ficam ambíguos: acrescenta o nome que o autor deu
+            if list(names.values()).count(names[r]) > 1 and r not in ROLE_PT:
+                labels[r] = lab.replace(" (#", f" «{r.replace('_', ' ')}» (#", 1)
+        bits.append("cores fixas: " + ", ".join(labels.values()))
     if mode == "model_picks":
         if prop:
             extra = {r: v for r, v in prop.items() if r not in fixed}

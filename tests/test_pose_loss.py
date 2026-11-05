@@ -141,3 +141,11 @@ def test_fix_guarda_copia_do_original(tmp_path):
     f.write_text((BASE % '    pose: {joints: {right_elbow: 175}}'), encoding="utf-8")
     main(["validate", str(f), "--fix"])
     assert (tmp_path / "c.yaml.bak").read_text(encoding="utf-8").count("175") == 1
+
+
+def test_paleta_desambigua_nomes_repetidos():
+    from scenelang import palette
+
+    d = {"palette": {"mode": "fixed", "colors": {"pine": "#1f4d3f", "grass": "#3f7a4e"}}}
+    s = palette.sentence(d)
+    assert "«pine»" in s and "«grass»" in s
