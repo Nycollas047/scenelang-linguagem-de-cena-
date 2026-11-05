@@ -96,7 +96,7 @@ def render_svg(scene: Scene, width: int = 960) -> str:
             o.append(f'<text x="{px(x) + (0 if small else 8):.1f}" y="{ty:.1f}" font-size="12" font-weight="600" fill="{INK}">{escape(e.id)}</text></g>')
             raw_pose = next((r.get("pose") for r in scene.data["entities"] if r.get("id") == e.id), None)
             if isinstance(raw_pose, dict):
-                o.append(skeleton.solids_svg(raw_pose, (px(x), py(y), w * W, h * H)))
+                o.append(skeleton.mannequin_svg(raw_pose, (px(x), py(y), w * W, h * H)))
             if e.orient and V.DIRECTIONS[e.orient] != (0, 0):
                 bx, by = L.anchor_xy(e.box, e.orient, "base")
                 tx, ty2 = L.anchor_xy(e.box, e.orient, "tip")

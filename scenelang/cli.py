@@ -256,7 +256,11 @@ def cmd_pose(a) -> int:
         return 2
     from . import render as R
 
-    for path in R.write_svg_text(skeleton.sheet_svg(raw["pose"], a.entity), a.out):
+    if a.style == "construction":
+        svg = skeleton.sheet_svg(raw["pose"], a.entity)
+    else:   # manequim: uma figura limpa, própria para servir de referência
+        svg = skeleton.reference_svg(raw["pose"])
+    for path in R.write_svg_text(svg, a.out):
         print(f"gravado: {path}")
     return 0
 
@@ -423,6 +427,8 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("pose", help="folha de construção da pose (caixas, cilindros, esferas) em 3 vistas")
     s.add_argument("scene"); s.add_argument("entity"); s.add_argument("--out", required=True)
+    s.add_argument("--style", choices=["mannequin", "construction"], default="mannequin",
+                   help="mannequin: figura limpa de referência (padrão); construction: folha didática em 3 vistas, com caixas e cilindros")
     s.set_defaults(fn=cmd_pose)
 
     s = sub.add_parser("locate", help="mede onde as entidades ficaram na imagem e detecta espelhamento")

@@ -298,3 +298,121 @@ def sheet_svg(pose: dict, title: str = "") -> str:
         o.append(f'<text x="{24 + (i % 3) * 340}" y="{545 + (i // 3) * 22}"><tspan font-weight="700">{a}:</tspan> {b}</text>')
     o.append("</g></svg>")
     return "".join(o)
+
+
+# ---- modo "manequim": silhueta limpa para referência (sem tracejado, sem rótulos, poucos tons) ------------------------
+TONES = {"light": "#d9dde3", "mid": "#aab1bb", "dark": "#7d8591", "deep": "#5b626d"}
+SIDE_TONE = {"right": ("#cfd3da", "#a3aab5", "#7a828f"), "left": ("#b7bdc7", "#8e96a3", "#666e7a")}   # (claro, médio, escuro)
+LIGHT = _norm((-0.4, 0.8, 0.45))   # luz vinda de cima, da esquerda da imagem e da câmera
+
+
+def mannequin_svg(pose: dict, box_px: tuple[float, float, float, float], sides: bool = True) -> str:
+    """Manequim de blocos preenchidos: só as faces visíveis, 3 tons por forma, sem linhas escondidas nem texto.
+
+    Pensado para ser olhado por um modelo de imagem ou por uma pessoa de relance: silhueta e orientação primeiro."""
+    x, y, w, h = box_px
+    P = points(pose)
+    rs, ls, hp, nk = P["right_shoulder"], P["left_shoulder"], P["hip"], P["neck"]
+    up = _norm(_sub(nk, hp))
+    rt = _norm(_sub(ls, rs))
+    fw = _norm(_cross(rt, up))
+    ext = list(P.values())
+    top = max(p[1] for p in ext) + HEAD_R * 1.2
+    bot = min(p[1] for p in ext) - 0.05
+    k = h * 0.94 / max(top - bot, 1e-6)
+    cx, y0 = x + w / 2, y + h * 0.03
+
+    def xy(p):
+        return cx + p[0] * k, y0 + (top - p[1]) * k
+
+    def pts_str(ps):
+        return " ".join(f"{xy(p)[0]:.1f},{xy(p)[1]:.1f}" for p in ps)
+
+    def shade(normal, tones):
+        d = sum(a * b for a, b in zip(_norm(normal), LIGHT))
+        return tones[0] if d > 0.35 else tones[1] if d > -0.1 else tones[2]
+
+    items: list[tuple[float, str]] = []
+    core = ("#cfd3da", "#a3aab5", "#7a828f")
+
+    def poly(ps, fill, z):
+        items.append((z, f'<polygon points="{pts_str(ps)}" fill="{fill}" stroke="{fill}" stroke-width="0.8" stroke-linejoin="round"/>'))
+
+    def blob(c, r, fill, z, flat=1.0):
+        px_, py_ = xy(c)
+        items.append((z, f'<ellipse cx="{px_:.1f}" cy="{py_:.1f}" rx="{r * k:.1f}" ry="{r * k * flat:.1f}" fill="{fill}"/>'))
+
+    def block(center, dims, tones):
+        dw, dh, dd = dims
+        faces = [((1, 0, 0), rt), ((-1, 0, 0), rt), ((0, 1, 0), up), ((0, -1, 0), up), ((0, 0, 1), fw), ((0, 0, -1), fw)]
+        for (a, b, c_), ax in faces:
+            n = tuple(ax[t] * (a + b + c_) for t in range(3))
+            if n[2] <= 0.02:
+                continue
+            corners = []
+            for u_, v_ in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                off = [0.0, 0.0, 0.0]
+                for axis_i, s in ((0, a), (1, b), (2, c_)):
+                    pass
+                vec = [(rt, dw), (up, dh), (fw, dd)]
+                fixed = next(i for i, v in enumerate((a, b, c_)) if v)
+                free = [i for i in range(3) if i != fixed]
+                coef = [0, 0, 0]
+                coef[fixed] = (a, b, c_)[fixed]
+                coef[free[0]], coef[free[1]] = u_, v_
+                corners.append(tuple(center[t] + sum(vec[i][0][t] * coef[i] * vec[i][1] / 2 for i in range(3)) for t in range(3)))
+            poly(corners, shade(n, tones), center[2] + n[2] * 0.01)
+
+    def limb(a, b, ra, rb, tones, z):
+        """Cápsula afunilada: polígono entre os dois círculos (tangentes) + esferas nas pontas."""
+        (ax, ay), (bx, by) = xy(a), xy(b)
+        dx, dy = bx - ax, by - ay
+        L = math.hypot(dx, dy)
+        mid = tones[1]
+        if L > 1e-6:
+            nx, ny = -dy / L, dx / L
+            ps = f"{ax + nx * ra * k:.1f},{ay + ny * ra * k:.1f} {bx + nx * rb * k:.1f},{by + ny * rb * k:.1f} " \
+                 f"{bx - nx * rb * k:.1f},{by - ny * rb * k:.1f} {ax - nx * ra * k:.1f},{ay - ny * ra * k:.1f}"
+            items.append((z, f'<polygon points="{ps}" fill="{mid}" stroke="{mid}" stroke-width="0.8" stroke-linejoin="round"/>'))
+        blob(a, ra, mid, z)
+        blob(b, rb, mid, z)
+
+    # tronco e pélvis (blocos paralelos)
+    tor_c = _mid(hp, nk)
+    block(tor_c, (SHOULDER * 2 * 0.95, TORSO * 0.62, 0.085), core)
+    pel_c = tuple(hp[t] - up[t] * 0.02 for t in range(3))
+    block(pel_c, (HIP * 2 * 1.25, 0.075, 0.075), core)
+    head = P["head"]
+    limb(nk, head, 0.02, 0.02, (core[1], core[1], core[2]), min(nk[2], head[2]) - 0.002)
+    hx, hy = xy(head)
+    hang = math.degrees(math.atan2(-(xy(head)[1] - xy(nk)[1]), xy(head)[0] - xy(nk)[0])) - 90
+    nose = P["nose"]
+    items.append((head[2] + 0.001, f'<ellipse cx="{hx:.1f}" cy="{hy:.1f}" rx="{HEAD_R * 0.85 * k:.1f}" ry="{HEAD_R * 1.12 * k:.1f}" '
+                           f'transform="rotate({-hang:.1f} {hx:.1f} {hy:.1f})" fill="{core[0]}"/>'))
+    # marca do rosto: ponto escuro dentro da cabeça, na direção em que o rosto aponta; some quando o rosto está de costas
+    face = _norm(_sub(nose, head))
+    if face[2] > -0.15:
+        fx_, fy_ = xy(tuple(head[t] + face[t] * HEAD_R * 0.6 for t in range(3)))
+        items.append((head[2] + 0.002, f'<circle cx="{fx_:.1f}" cy="{fy_:.1f}" r="{HEAD_R * 0.22 * k:.1f}" fill="{core[2]}"/>'))
+    for side in ("right", "left"):
+        tones = SIDE_TONE[side] if sides else core
+        sh, el, wr = P[f"{side}_shoulder"], P[f"{side}_elbow"], P[f"{side}_wrist"]
+        limb(sh, el, 0.036, 0.029, tones, (sh[2] + el[2]) / 2)
+        limb(el, wr, 0.029, 0.021, tones, (el[2] + wr[2]) / 2)
+        fd = _norm(_sub(wr, el))
+        hand_end = tuple(wr[t] + fd[t] * 0.075 for t in range(3))
+        limb(wr, hand_end, 0.026, 0.02, tones, wr[2] + 0.0003)
+        hi, kn, an = P[f"{side}_hip"], P[f"{side}_knee"], P[f"{side}_ankle"]
+        limb(hi, kn, 0.05, 0.037, tones, (hi[2] + kn[2]) / 2)
+        limb(kn, an, 0.037, 0.025, tones, (kn[2] + an[2]) / 2)
+        toe = tuple(an[t] + fw[t] * 0.115 - up[t] * 0.05 for t in range(3))
+        heel_b = tuple(an[t] - up[t] * 0.05 for t in range(3))
+        poly([an, toe, heel_b], tones[2], an[2])
+    items.sort(key=lambda t: t[0])
+    return '<g class="pose mannequin">' + "".join(s for _, s in items) + "</g>"
+
+
+def reference_svg(pose: dict, width: int = 768, height: int = 1024, bg: str = "#f4f5f7") -> str:
+    """Imagem de referência limpa: um manequim, fundo liso, sem texto."""
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
+            f'<rect width="{width}" height="{height}" fill="{bg}"/>' + mannequin_svg(pose, (0, 0, width, height)) + "</svg>")

@@ -96,7 +96,7 @@ def test_skeleton_cotovelo_dobrado_aproxima_punho_do_ombro():
 def test_render_desenha_esqueleto():
     d, scene, _ = load_text(SCENE.replace("kind: prop\n    label: a bola vermelha", "kind: character\n    label: a bola vermelha")
                             .replace("    signature: [\"#d00000\"]", "    pose: {joints: {right_elbow: 90}}"))
-    assert 'class="pose solids"' in render_svg(scene)
+    assert 'class="pose mannequin"' in render_svg(scene)
 
 
 def test_solidos_tem_caixas_cilindros_e_legenda():
@@ -112,3 +112,19 @@ def test_cilindro_apontando_para_camera_fica_mais_aberto():
     caido = skeleton.solids_svg({"joints": {}}, (0, 0, 300, 400))
     frente = skeleton.solids_svg({"joints": {"right_shoulder": {"flex": 90}}}, (0, 0, 300, 400))
     assert caido != frente
+
+
+def test_manequim_e_limpo_sem_tracejado_nem_texto():
+    svg = skeleton.mannequin_svg({"body_yaw": 150, "joints": {"neck": {"turn": 70}, "right_elbow": 90}}, (0, 0, 300, 400))
+    assert "dasharray" not in svg and "<text" not in svg and svg.count("<polygon") >= 4
+
+
+def test_manequim_marca_do_rosto_some_de_costas():
+    de_costas = skeleton.mannequin_svg({"body_yaw": 180}, (0, 0, 300, 400))
+    de_frente = skeleton.mannequin_svg({"body_yaw": 0}, (0, 0, 300, 400))
+    assert de_frente.count("<circle") == 1 and de_costas.count("<circle") == 0
+
+
+def test_referencia_tem_fundo_liso_e_um_manequim():
+    svg = skeleton.reference_svg({"body_yaw": 30})
+    assert svg.count('class="pose mannequin"') == 1 and "<rect" in svg
