@@ -113,3 +113,192 @@ def svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
     o.append(f'<line x1="{hx:.1f}" y1="{hy:.1f}" x2="{nx:.1f}" y2="{ny:.1f}" stroke="{CORE_COL}" stroke-width="2" stroke-dasharray="2 2"/>')
     o.append("</g>")
     return "".join(o)
+
+
+# ---- modo "sólidos": boneco de construção (caixas, cilindros, esferas, cunhas) -----------------------------------
+def _sub(a, b):
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _norm(v):
+    n = math.sqrt(sum(c * c for c in v)) or 1.0
+    return (v[0] / n, v[1] / n, v[2] / n)
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _mid(a, b):
+    return ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+
+
+def solids_svg(pose: dict, box_px: tuple[float, float, float, float]) -> str:
+    """Boneco de construção: cabeça = esfera alongada, pescoço/braços/pernas = cilindros afunilados,
+    ombros = esferas, tronco e pélvis = caixas, mãos = ovos, pés = cunhas.
+    O cilindro mostra a elipse mais ABERTA quando aponta para a câmera (|eixo·z| grande)."""
+    x, y, w, h = box_px
+    P = points(pose)
+    yaw = math.radians(pose.get("body_yaw", 0) or 0)
+    rs, ls, hp, nk = P["right_shoulder"], P["left_shoulder"], P["hip"], P["neck"]
+    up = _norm(_sub(nk, hp))
+    rt = _norm(_sub(ls, rs))
+    fw = _norm(_cross(rt, up))
+    # extensões dos sólidos (para caber no quadro)
+    ext = [P[k] for k in P] + [P["head"]]
+    top = max(p[1] for p in ext) + HEAD_R * 1.2
+    bot = min(p[1] for p in ext) - 0.05
+    k = h * 0.94 / max(top - bot, 1e-6)
+    cx, y0 = x + w / 2, y + h * 0.03
+
+    def xy(p):
+        return cx + p[0] * k, y0 + (top - p[1]) * k
+
+    items: list[tuple[float, str]] = []   # (profundidade z, svg) — pintados do mais longe ao mais perto
+
+    def add(z, s):
+        items.append((z, s))
+
+    def line(a, b, col, wd=1.8, dash=False):
+        (x1, y1), (x2, y2) = xy(a), xy(b)
+        d = ' stroke-dasharray="3 3" opacity="0.45"' if dash else ""
+        return f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{col}" stroke-width="{wd}" stroke-linecap="round"{d}/>'
+
+    def sphere(c, r, col, flat=1.0):
+        px_, py_ = xy(c)
+        return (f'<ellipse cx="{px_:.1f}" cy="{py_:.1f}" rx="{r * k:.1f}" ry="{r * k * flat:.1f}" fill="#fff" fill-opacity="0.55" '
+                f'stroke="{col}" stroke-width="1.8"/>')
+
+    def cylinder(a, b, ra, rb, col):
+        """Cilindro afunilado de a (raio ra) a b (raio rb); elipses nas pontas, abertura = |u·z|."""
+        u = _norm(_sub(b, a))
+        (ax, ay), (bx, by) = xy(a), xy(b)
+        ang = math.degrees(math.atan2(by - ay, bx - ax))
+        open_ = abs(u[2])
+        o = []
+        dx, dy = bx - ax, by - ay
+        L = math.hypot(dx, dy)
+        if L > 1e-6:
+            nx, ny = -dy / L, dx / L
+            for s in (1, -1):
+                o.append(f'<line x1="{ax + nx * ra * k * s:.1f}" y1="{ay + ny * ra * k * s:.1f}" x2="{bx + nx * rb * k * s:.1f}" '
+                         f'y2="{by + ny * rb * k * s:.1f}" stroke="{col}" stroke-width="1.8"/>')
+        for (px_, py_), r, front in (((ax, ay), ra, u[2] < 0), ((bx, by), rb, u[2] >= 0)):
+            ry_ = max(r * k * open_, 0.8)
+            dash = "" if front else ' stroke-dasharray="3 3"'
+            o.append(f'<ellipse cx="{px_:.1f}" cy="{py_:.1f}" rx="{max(r * k * 0.0 + ry_, 0.8):.1f}" ry="{r * k:.1f}" '
+                     f'transform="rotate({ang:.1f} {px_:.1f} {py_:.1f})" fill="#fff" fill-opacity="0.5" stroke="{col}" stroke-width="1.6"{dash}/>')
+        return "".join(o)
+
+    def box(center, axes, dims, col):
+        """Caixa com 3 eixos ortonormais (r, u, f) e dimensões (largura, altura, profundidade). Arestas de trás tracejadas."""
+        (r_, u_, f_), (dw, dh, dd) = axes, dims
+        pts = {}
+        for i, sr in enumerate((-1, 1)):
+            for j, su in enumerate((-1, 1)):
+                for m, sf in enumerate((-1, 1)):
+                    pts[(i, j, m)] = tuple(center[t] + r_[t] * sr * dw / 2 + u_[t] * su * dh / 2 + f_[t] * sf * dd / 2 for t in range(3))
+        edges = [((i, j, m), (i2, j2, m2)) for (i, j, m) in pts for (i2, j2, m2) in pts
+                 if (i, j, m) < (i2, j2, m2) and sum(a != b for a, b in zip((i, j, m), (i2, j2, m2))) == 1]
+        o = []
+        zc = center[2]
+        for a, b in edges:
+            back = (pts[a][2] + pts[b][2]) / 2 < zc - 1e-9
+            o.append(line(pts[a], pts[b], col, 1.8, dash=back))
+        o.insert(0, "".join(f'<!--box-->'))
+        # face de trás/atrás preenchida de leve para dar volume
+        poly = [pts[(i, j, m)] for (i, j, m) in ((0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1))]
+        pts2 = " ".join(f"{xy(p)[0]:.1f},{xy(p)[1]:.1f}" for p in poly)
+        o.insert(0, f'<polygon points="{pts2}" fill="#fff" fill-opacity="0.4" stroke="none"/>')
+        return "".join(o)
+
+    def wedge(heel, forward, up_, side, col):
+        """Cunha (pé): calcanhar alto, ponta baixa. heel = ponto do tornozelo."""
+        hw, tw, ln, hh = 0.04, 0.032, 0.115, 0.05
+        v = {}
+        for nm, s in (("l", -1), ("r", 1)):
+            v["ht" + nm] = tuple(heel[t] + side[t] * s * hw / 2 for t in range(3))
+            v["hb" + nm] = tuple(heel[t] + side[t] * s * hw / 2 - up_[t] * hh for t in range(3))
+            v["tt" + nm] = tuple(heel[t] + side[t] * s * tw / 2 - up_[t] * hh + forward[t] * ln for t in range(3))
+        es = [("htl", "htr"), ("hbl", "hbr"), ("ttl", "ttr"), ("htl", "hbl"), ("htr", "hbr"), ("hbl", "ttl"), ("hbr", "ttr"), ("htl", "ttl"), ("htr", "ttr")]
+        return "".join(line(v[a], v[b], col, 1.6, dash=(v[a][2] + v[b][2]) / 2 < heel[2] - 0.04) for a, b in es)
+
+    def egg(a, b, wid, col):
+        (ax, ay), (bx, by) = xy(a), xy(b)
+        ang = math.degrees(math.atan2(by - ay, bx - ax))
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        L = math.hypot(bx - ax, by - ay)
+        return (f'<ellipse cx="{mx:.1f}" cy="{my:.1f}" rx="{L / 2:.1f}" ry="{wid * k:.1f}" transform="rotate({ang:.1f} {mx:.1f} {my:.1f})" '
+                f'fill="#fff" fill-opacity="0.55" stroke="{col}" stroke-width="1.6"/>')
+
+    # tronco e pélvis: caixas paralelas (mesmos eixos), como no desenho de construção
+    tor_c = _mid(hp, nk)
+    tor_c = tuple(tor_c[t] + up[t] * 0.0 for t in range(3))
+    add(tor_c[2], box(tor_c, (rt, up, fw), (SHOULDER * 2 * 0.95, TORSO * 0.62, 0.085), CORE_COL))
+    pel_c = tuple(hp[t] - up[t] * 0.02 for t in range(3))
+    add(pel_c[2] - 0.001, box(pel_c, (rt, up, fw), (HIP * 2 * 1.25, 0.075, 0.075), CORE_COL))
+    # pescoço e cabeça
+    head = P["head"]
+    add(nk[2] - 0.001, cylinder(nk, tuple(nk[t] + (head[t] - nk[t]) * 0.8 for t in range(3)), 0.016, 0.016, CORE_COL))
+    hx, hy = xy(head)
+    hup = _norm(_sub(head, nk))
+    hang = math.degrees(math.atan2(-(xy(head)[1] - xy(nk)[1]), xy(head)[0] - xy(nk)[0])) - 90
+    nose = P["nose"]
+    add(head[2], f'<ellipse cx="{hx:.1f}" cy="{hy:.1f}" rx="{HEAD_R * 0.85 * k:.1f}" ry="{HEAD_R * 1.12 * k:.1f}" '
+                 f'transform="rotate({-hang:.1f} {hx:.1f} {hy:.1f})" fill="#fff" fill-opacity="0.6" stroke="{CORE_COL}" stroke-width="2"/>'
+                 f'<path d="M {hx:.1f} {hy - HEAD_R * 1.1 * k:.1f} Q {xy(nose)[0] + (xy(nose)[0] - hx) * 0.6:.1f} {hy:.1f} {hx:.1f} {hy + HEAD_R * 1.1 * k:.1f}" '
+                 f'fill="none" stroke="{CORE_COL}" stroke-width="1.4"/>'
+                 f'<line x1="{hx - HEAD_R * 0.85 * k:.1f}" y1="{hy:.1f}" x2="{hx + HEAD_R * 0.85 * k:.1f}" y2="{hy:.1f}" stroke="{CORE_COL}" stroke-width="1" stroke-dasharray="2 3"/>')
+    for side, col, ab in (("right", RIGHT_COL, "D"), ("left", LEFT_COL, "E")):
+        sh, el, wr = P[f"{side}_shoulder"], P[f"{side}_elbow"], P[f"{side}_wrist"]
+        add(sh[2], sphere(sh, 0.036, col))
+        add((sh[2] + el[2]) / 2, cylinder(sh, el, 0.034, 0.028, col))
+        add(el[2], sphere(el, 0.026, col))
+        add((el[2] + wr[2]) / 2, cylinder(el, wr, 0.028, 0.02, col))
+        fd = _norm(_sub(wr, el))
+        hand_end = tuple(wr[t] + fd[t] * 0.075 for t in range(3))
+        add(wr[2], egg(wr, hand_end, 0.026, col))
+        wx, wy = xy(hand_end)
+        add(wr[2] + 0.001, f'<text x="{wx + 5:.1f}" y="{wy + 4:.1f}" font-size="10" font-weight="700" fill="{col}">{ab}</text>')
+        hi, kn, an = P[f"{side}_hip"], P[f"{side}_knee"], P[f"{side}_ankle"]
+        add((hi[2] + kn[2]) / 2, cylinder(hi, kn, 0.05, 0.036, col))
+        add(kn[2], sphere(kn, 0.034, col))
+        add((kn[2] + an[2]) / 2, cylinder(kn, an, 0.036, 0.024, col))
+        add(an[2], wedge(an, fw, up, rt, col))
+    items.sort(key=lambda t: t[0])
+    return '<g class="pose solids" opacity="0.95">' + "".join(s for _, s in items) + "</g>"
+
+
+LEGEND = [("Cabeça", "esfera alongada"), ("Pescoço", "cilindro"), ("Ombro", "esfera"), ("Tronco", "caixa alta e fina"),
+          ("Pélvis", "caixa larga e fina"), ("Braços e pernas", "cilindros afunilados"), ("Articulações", "esferas/cilindros"),
+          ("Mãos", "ovos esmagados"), ("Pés", "cunhas")]
+
+
+def sheet_svg(pose: dict, title: str = "") -> str:
+    """Folha de construção: a pose declarada em 3 vistas (como declarada, de frente e de perfil) + legenda dos sólidos."""
+    import copy
+    from html import escape
+
+    views = []
+    d = pose.get("body_yaw", 0) or 0
+    views.append((f"como declarada (giro {d:g}°)", copy.deepcopy(pose)))
+    for label, yaw in (("de frente (0°)", 0), ("de perfil (90°)", 90)):
+        p = copy.deepcopy(pose)
+        p["body_yaw"] = yaw
+        views.append((label, p))
+    W, H, cw = 1080, 640, 300
+    o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="DejaVu Sans, sans-serif">',
+         f'<rect width="{W}" height="{H}" fill="#eef0f3"/>',
+         f'<text x="24" y="34" font-size="20" font-weight="700" fill="#1f2937">Formas sólidas — {escape(title)}</text>',
+         '<text x="24" y="56" font-size="12" fill="#6b7280">Esquerda/direita do próprio personagem (E azul, D laranja). Tracejado = parte de trás. '
+         'A elipse do cilindro fica mais aberta quando o membro aponta para você.</text>']
+    for i, (label, p) in enumerate(views):
+        x0 = 24 + i * (cw + 12)
+        o.append(f'<rect x="{x0}" y="72" width="{cw}" height="420" rx="8" fill="#fff" fill-opacity="0.7" stroke="#cbd5e1"/>')
+        o.append(solids_svg(p, (x0, 80, cw, 404)))
+        o.append(f'<text x="{x0 + 10}" y="510" font-size="12" font-weight="600" fill="#1f2937">{escape(label)}</text>')
+    o.append('<g font-size="12" fill="#1f2937">')
+    for i, (a, b) in enumerate(LEGEND):
+        o.append(f'<text x="{24 + (i % 3) * 340}" y="{545 + (i // 3) * 22}"><tspan font-weight="700">{a}:</tspan> {b}</text>')
+    o.append("</g></svg>")
+    return "".join(o)

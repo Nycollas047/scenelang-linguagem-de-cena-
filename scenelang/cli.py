@@ -243,6 +243,21 @@ def cmd_locate(a) -> int:
     return 1 if bad else 0
 
 
+def cmd_pose(a) -> int:
+    from . import skeleton
+
+    scene, _ = _load(a.scene)
+    raw = next((e for e in scene.data["entities"] if e.get("id") == a.entity), None)
+    if raw is None or not isinstance(raw.get("pose"), dict):
+        print(f"a entidade {a.entity!r} não existe ou não tem `pose`", file=sys.stderr)
+        return 2
+    from . import render as R
+
+    for path in R.write_svg_text(skeleton.sheet_svg(raw["pose"], a.entity), a.out):
+        print(f"gravado: {path}")
+    return 0
+
+
 def cmd_cutout(a) -> int:
     from PIL import Image
 
@@ -402,6 +417,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--loss", action="store_true", help="lista o que a cena declara e o backend não leva ao gerador")
     s.add_argument("--strict", action="store_true", help="falha (código 3) se houver perda real ou a cena não tiver asserts")
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
+
+    s = sub.add_parser("pose", help="folha de construção da pose (caixas, cilindros, esferas) em 3 vistas")
+    s.add_argument("scene"); s.add_argument("entity"); s.add_argument("--out", required=True)
+    s.set_defaults(fn=cmd_pose)
 
     s = sub.add_parser("locate", help="mede onde as entidades ficaram na imagem e detecta espelhamento")
     s.add_argument("scene"); s.add_argument("image", nargs="?")

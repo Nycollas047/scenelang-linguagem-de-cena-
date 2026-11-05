@@ -77,7 +77,11 @@ Evita anatomia impossível: cada junta recebe um ângulo e a linguagem rejeita o
 acusa **espelhamento** e reavalia os asserts de posição (`left_of`, `above`, `inside`...) sobre as caixas medidas.
 - `signature: ["#a42625", "#551014"]` (na entidade, 1 a 3 cores): o código acha esses pixels sem modelo de visão; serve quando a cor é distintiva.
 - `--boxes`: caixas `{id: [x, y, w, h]}` de quem olhou a imagem; `locate cena.yaml --form` gera o pedido para um modelo de visão.
-- `scenelang render` desenha um esqueleto de palitos para entidades com `pose` (D = lado direito do personagem, E = esquerdo).
+- `scenelang render` desenha o boneco de construção da `pose` dentro da caixa da entidade; `scenelang pose cena.yaml <id> --out figura.png`
+  gera a folha grande em 3 vistas (como declarada, de frente, de perfil).
+- Boneco de construção: cabeça = esfera alongada, pescoço e membros = cilindros afunilados, ombros e joelhos = esferas, tronco e pélvis = caixas
+  paralelas, mãos = ovos, pés = cunhas. Tracejado = parte de trás; a elipse do cilindro fica mais aberta quando o membro aponta para a câmera.
+  D (laranja) = lado direito do personagem, E (azul) = esquerdo.
 
 ## Relatório de perdas (v0.4)
 `scenelang compile cena.yaml --loss` lista o que o backend não leva ao gerador (`lost`, `approx`, `unchecked`);

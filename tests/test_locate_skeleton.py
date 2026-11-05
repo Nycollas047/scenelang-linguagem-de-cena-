@@ -98,3 +98,18 @@ def test_render_desenha_esqueleto():
     d, scene, _ = load_text(SCENE.replace("kind: prop\n    label: a bola vermelha", "kind: character\n    label: a bola vermelha")
                             .replace("    signature: [\"#d00000\"]", "    pose: {joints: {right_elbow: 90}}"))
     assert 'class="pose"' in render_svg(scene)
+
+
+def test_solidos_tem_caixas_cilindros_e_legenda():
+    pose = {"body_yaw": 30, "joints": {"right_elbow": 90, "left_knee": 40}}
+    svg = skeleton.solids_svg(pose, (0, 0, 300, 400))
+    assert "<ellipse" in svg and "<polygon" in svg and "stroke-dasharray" in svg
+    sheet = skeleton.sheet_svg(pose, "x")
+    assert "caixa alta e fina" in sheet and sheet.count('class="pose solids"') == 3
+
+
+def test_cilindro_apontando_para_camera_fica_mais_aberto():
+    # braço para a frente (flex 90): a elipse da ponta tem mais abertura que o braço caído
+    caido = skeleton.solids_svg({"joints": {}}, (0, 0, 300, 400))
+    frente = skeleton.solids_svg({"joints": {"right_shoulder": {"flex": 90}}}, (0, 0, 300, 400))
+    assert caido != frente

@@ -96,7 +96,7 @@ def render_svg(scene: Scene, width: int = 960) -> str:
             o.append(f'<text x="{px(x) + (0 if small else 8):.1f}" y="{ty:.1f}" font-size="12" font-weight="600" fill="{INK}">{escape(e.id)}</text></g>')
             raw_pose = next((r.get("pose") for r in scene.data["entities"] if r.get("id") == e.id), None)
             if isinstance(raw_pose, dict):
-                o.append(skeleton.svg(raw_pose, (px(x), py(y), w * W, h * H)))
+                o.append(skeleton.solids_svg(raw_pose, (px(x), py(y), w * W, h * H)))
             if e.orient and V.DIRECTIONS[e.orient] != (0, 0):
                 bx, by = L.anchor_xy(e.box, e.orient, "base")
                 tx, ty2 = L.anchor_xy(e.box, e.orient, "tip")
@@ -145,6 +145,21 @@ def render_svg(scene: Scene, width: int = 960) -> str:
         o.append(f'<text x="{ox + 22 + 430}" y="{yy:.1f}" font-size="11" fill="{MUTED}">{escape(r.detail)}</text>')
     o.append('</svg>')
     return "\n".join(o)
+
+
+def write_svg_text(svg: str, out: str | Path) -> list[Path]:
+    """Grava um SVG já pronto; com .png, converte via rsvg-convert quando existir."""
+    out = Path(out)
+    if out.suffix.lower() != ".png":
+        out.write_text(svg, encoding="utf-8")
+        return [out]
+    svg_path = out.with_suffix(".svg")
+    svg_path.write_text(svg, encoding="utf-8")
+    exe = shutil.which("rsvg-convert")
+    if exe:
+        subprocess.run([exe, "-o", str(out), str(svg_path)], check=True)
+        return [svg_path, out]
+    return [svg_path]
 
 
 def write_render(scene: Scene, out: str | Path, width: int = 960) -> list[Path]:
