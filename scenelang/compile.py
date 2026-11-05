@@ -208,6 +208,8 @@ def build_ir(scene: Scene, passname: str | None = None) -> dict:
         ir["manter_igual"] = "Mantenha exatamente igual à versão anterior: " + "; ".join(names) + "."
     if d.get("finish"):
         ir["acabamento"] = d["finish"]
+    if d.get("corrections"):
+        ir["correcoes"] = [c for c in d["corrections"] if isinstance(c, str) and c.strip()]
     if reminders:
         ir["lembrete_final"] = reminders
     return ir
@@ -248,6 +250,8 @@ def to_prose(scene: Scene, passname: str | None = None) -> str:
         lines += ["", "ACABAMENTO: " + ir["acabamento"] + "."]
     if "manter_igual" in ir:
         lines += ["", "TRAVAS: " + ir["manter_igual"]]
+    if ir.get("correcoes"):
+        lines += ["", "CORREÇÕES DA VERSÃO ANTERIOR (aplique):"] + [f"- {t}" for t in ir["correcoes"]]
     if "lembrete_final" in ir:
         lines += ["", "LEMBRETE FINAL (crítico):"] + [f"- {t}" for t in ir["lembrete_final"]]
     return "\n".join(lines) + "\n"
@@ -268,7 +272,7 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
     weights = {k: float(v) / 100.0 for k, v in (style.get("mix") or {}).items()}
     global_bits = [ir["estilo"], ir["quadro"], ir["grade"]]
     for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera", "intencao", "iluminacao", "ordem_do_olhar",
-                "detalhes", "detalhe_de_textura", "manter_igual", "acabamento", "lembrete_final"):
+                "detalhes", "detalhe_de_textura", "manter_igual", "acabamento", "correcoes", "lembrete_final"):
         if key in ir:
             v = ir[key]
             global_bits.append(" ".join(v) if isinstance(v, list) else v)

@@ -179,14 +179,17 @@ class Frame:
 
 
 def _cluster_count(rgb_pixels, de: float = 4.0) -> int:
+    """Conta cores distintas por agrupamento guloso em Lab (ΔE ≤ de agrupa). Vetorizado: ordem e resultado iguais ao laço simples."""
     np, _ = _np()
     uniq = np.unique((rgb_pixels.reshape(-1, 3) // 4) * 4, axis=0)
-    reps: list = []
-    for u in uniq:
-        lab = C.to_lab(tuple(int(x) for x in u))
-        if all(((lab[0] - r[0]) ** 2 + (lab[1] - r[1]) ** 2 + (lab[2] - r[2]) ** 2) ** 0.5 > de for r in reps):
-            reps.append(lab)
-    return len(reps)
+    labs = np.array([C.to_lab(tuple(int(x) for x in u)) for u in uniq], dtype=float)
+    reps = np.empty((len(labs), 3))
+    n = 0
+    for lab in labs:
+        if n == 0 or np.all(np.sqrt(((reps[:n] - lab) ** 2).sum(axis=1)) > de):
+            reps[n] = lab
+            n += 1
+    return n
 
 
 # ---- verificadores -----------------------------------------------------------

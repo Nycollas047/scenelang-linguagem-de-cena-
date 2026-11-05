@@ -25,7 +25,7 @@ from .negations import to_affirmation
 TOP_KEYS = {
     "scene", "version", "canvas", "grid", "style", "intent", "camera", "palette",
     "lights", "entities", "gaze", "asserts", "details", "finish", "glossary",
-    "avoid", "priority_boost", "history",
+    "avoid", "priority_boost", "history", "corrections",
     "colors", "guides", "background", "atmosphere", "materials", "detail", "verify", "lock", "extends", "import",
 }
 REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
@@ -423,7 +423,7 @@ def _check_asserts(c: _Collector, data: dict, scene: Scene | None) -> None:
 
 
 def _check_misc(c: _Collector, data: dict) -> None:
-    for key in ("details", "avoid", "priority_boost"):
+    for key in ("details", "avoid", "priority_boost", "corrections"):
         if key in data:
             _str_list(c, f"$.{key}", data[key])
     if "finish" in data and not isinstance(data["finish"], str):

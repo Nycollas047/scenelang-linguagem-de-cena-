@@ -351,9 +351,6 @@ def mannequin_svg(pose: dict, box_px: tuple[float, float, float, float], sides: 
                 continue
             corners = []
             for u_, v_ in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
-                off = [0.0, 0.0, 0.0]
-                for axis_i, s in ((0, a), (1, b), (2, c_)):
-                    pass
                 vec = [(rt, dw), (up, dh), (fw, dd)]
                 fixed = next(i for i, v in enumerate((a, b, c_)) if v)
                 free = [i for i in range(3) if i != fixed]

@@ -9,7 +9,7 @@ from pathlib import Path
 from . import __version__
 from .assertions import evaluate_all
 from . import plan as plan_mod
-from .compile import BACKENDS, to_regions
+from .compile import BACKENDS, to_prose, to_regions
 from .evalform import apply_answers, build_form, dump_scene
 from .render import write_render
 from .validate import load_file, load_text
@@ -272,6 +272,64 @@ def cmd_pose(a) -> int:
     return 0
 
 
+def cmd_correct(a) -> int:
+    from PIL import Image
+
+    from . import correct as CR
+
+    scene, _ = _load(a.scene)
+    boxes = json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None
+    img = Image.open(a.image)
+    findings, items = CR.measure(scene, img, boxes)
+    if not findings:
+        print("nada a medir: declare `verify`, `signature` nas entidades ou passe --boxes", file=sys.stderr)
+        return 2
+    for f in findings:
+        print(f"{'✓' if f.ok else '✗'} [{f.kind}] {f.check:<34} {f.detail}" + (f"  ({f.source})" if f.source and f.kind != "verify" else ""))
+    new, corr = CR.next_scene(scene, findings, items, Path(a.image).name)
+    out = Path(a.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name), ensure_ascii=False, indent=2), encoding="utf-8")
+    from .evalform import dump_scene
+
+    new_text = dump_scene(new)
+    diags, ok_scene, _ = load_text(new_text)
+    if ok_scene is None:
+        for d in diags:
+            print(d, file=sys.stderr)
+        return 1
+    (out / "cena.next.yaml").write_text(new_text, encoding="utf-8")
+    (out / "prompt_next.txt").write_text(to_prose(ok_scene), encoding="utf-8")
+    ok = all(f.ok for f in findings)
+    print(f"\n{sum(f.ok for f in findings)}/{len(findings)} medições cumpridas; {len(corr)} correção(ões) para a próxima rodada.")
+    print(f"gravado em {out}: relatorio.json, cena.next.yaml, prompt_next.txt")
+    return 0 if ok else 1
+
+
+def cmd_pack(a) -> int:
+    from . import pack as PK
+
+    scene, _ = _load(a.scene)
+    text = Path(a.scene).read_text(encoding="utf-8")
+    for p in PK.pack(scene, text, a.out_dir, a.only, a.labels, a.width):
+        print(f"gravado: {p}")
+    return 0
+
+
+def cmd_unpack(a) -> int:
+    from . import pack as PK
+
+    meta = PK.unpack(a.image)
+    if not meta:
+        print("a imagem não traz metadados do scenelang", file=sys.stderr)
+        return 1
+    if a.what == "all":
+        print(json.dumps(meta, ensure_ascii=False, indent=2))
+    else:
+        sys.stdout.write(meta.get(f"scenelang-{a.what}", ""))
+    return 0
+
+
 def cmd_cutout(a) -> int:
     from PIL import Image
 
@@ -437,6 +495,24 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--style", choices=["mannequin", "construction"], default="mannequin",
                    help="mannequin: figura limpa de referência (padrão); construction: folha didática em 3 vistas, com caixas e cilindros")
     s.set_defaults(fn=cmd_pose)
+
+    s = sub.add_parser("correct", help="mede a imagem, grava o relatório e prepara o prompt da próxima rodada")
+    s.add_argument("scene"); s.add_argument("image")
+    s.add_argument("--boxes", help="JSON {id: [x,y,w,h]} de quem olhou a imagem")
+    s.add_argument("--out-dir", default="rodada")
+    s.set_defaults(fn=cmd_correct)
+
+    s = sub.add_parser("pack", help="junta prompt, guia de composição e cena em um formato que o modelo de destino aceita")
+    s.add_argument("scene"); s.add_argument("--out-dir", required=True)
+    s.add_argument("--only", choices=["text", "guide", "single"], help="text: só prompt.txt; guide: guia.png + prompt; single: UM arquivo (guia + prompt na imagem)")
+    s.add_argument("--labels", action=argparse.BooleanOptionalAction, default=None,
+                   help="escreve o nome de cada elemento no guia (padrão: sim em --only single, não nos demais)")
+    s.add_argument("--width", type=int, default=1024)
+    s.set_defaults(fn=cmd_pack)
+
+    s = sub.add_parser("unpack", help="lê prompt/cena embutidos nos metadados de um PNG gerado por `pack`")
+    s.add_argument("image"); s.add_argument("what", nargs="?", default="all", choices=["all", "prompt", "yaml", "cena"])
+    s.set_defaults(fn=cmd_unpack)
 
     s = sub.add_parser("locate", help="mede onde as entidades ficaram na imagem e detecta espelhamento")
     s.add_argument("scene"); s.add_argument("image", nargs="?")

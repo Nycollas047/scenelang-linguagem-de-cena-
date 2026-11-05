@@ -83,6 +83,24 @@ acusa **espelhamento** e reavalia os asserts de posição (`left_of`, `above`, `
   paralelas, mãos = ovos, pés = cunhas. Tracejado = parte de trás; a elipse do cilindro fica mais aberta quando o membro aponta para a câmera.
   D (laranja) = lado direito do personagem, E (azul) = esquerdo.
 
+## Laço de correção automático (v0.5)
+`scenelang correct cena.yaml imagem.png [--boxes achados.json] --out-dir rodada1` mede a imagem (verify, posição, espelhamento) e grava:
+- `relatorio.json`: o registro da rodada (medições, caixas declaradas × medidas, IoU), que serve de dado de avaliação;
+- `cena.next.yaml`: a cena com `corrections` (uma frase afirmativa por falha, dizendo o que estava errado e onde deve ficar),
+  `priority_boost` nos asserts de posição reprovados e `history`;
+- `prompt_next.txt`: o prompt da próxima rodada, com a seção "CORREÇÕES DA VERSÃO ANTERIOR".
+Código de saída 0 se tudo passou, 1 se há falhas. `corrections` é uma lista de textos (até 12) e pode ser escrita à mão.
+
+## Um arquivo só (v0.5)
+`scenelang pack cena.yaml --out-dir pacote [--only text|guide|single]` escolhe o formato pelo que o modelo de destino aceita:
+| Modelo aceita | Use | Arquivos |
+|---|---|---|
+| só texto | `--only text` | `prompt.txt` |
+| texto + uma imagem de referência | `--only guide` | `guia.png` + `prompt_com_guia.txt` |
+| um único anexo (chat com visão) | `--only single` | `cena_unica.png`: guia no alto e o prompt escrito embaixo |
+O guia mostra retângulos por plano e o manequim de cada entidade com `pose`; `--labels` escreve o nome de cada elemento (padrão: só em `single`).
+O PNG leva prompt e cena nos metadados: `scenelang unpack cena_unica.png [prompt|yaml|cena]` recupera.
+
 ## Relatório de perdas (v0.4)
 `scenelang compile cena.yaml --loss` lista o que o backend não leva ao gerador (`lost`, `approx`, `unchecked`);
 `--strict` falha com código 3 se há parte sem tradução ou a cena não tem asserts. O backend `regions` agora leva
