@@ -204,6 +204,45 @@ def cmd_verify(a) -> int:
     return 0 if all(r.ok for r in results) else 1
 
 
+def cmd_locate(a) -> int:
+    from . import locate as LC
+
+    scene, _ = _load(a.scene)
+    if a.form:
+        sys.stdout.write(LC.form(scene))
+        return 0
+    if not a.image:
+        print("informe a imagem (ou use --form para gerar o pedido de localização)", file=sys.stderr)
+        return 2
+    from PIL import Image
+
+    measured, source = {}, {}
+    img = Image.open(a.image)
+    for k, v in LC.locate_by_signature(scene, img).items():
+        measured[k], source[k] = v, "assinatura"
+    if a.boxes:
+        for k, v in json.loads(Path(a.boxes).read_text(encoding="utf-8")).items():
+            if v is not None and k in scene.by_id:
+                measured[k], source[k] = tuple(v), "informada"
+    items = LC.compare(scene, measured, source)
+    if not items:
+        print("nenhuma entidade localizada: declare `signature` nas entidades ou passe --boxes", file=sys.stderr)
+        return 2
+    for it in items:
+        d, m = it.declared, it.measured
+        print(f"{it.id:<12} declarada x={d[0]:.2f} y={d[1]:.2f} w={d[2]:.2f} h={d[3]:.2f} | medida x={m[0]:.2f} y={m[1]:.2f} w={m[2]:.2f} h={m[3]:.2f} "
+              f"| IoU {LC.iou(d, m):.2f} ({it.source})")
+    verdict, detail = LC.mirror_verdict(items)
+    print(f"\nespelhamento: {verdict} ({detail})")
+    res, skipped = LC.recheck_asserts(scene, measured)
+    for r in res:
+        print(f"{'✓' if r.ok else '✗'} {r.raw:<40} {r.detail}")
+    for raw in skipped:
+        print(f"· {raw:<40} sem medida de todas as entidades")
+    bad = verdict == "espelhada" or any(not r.ok for r in res)
+    return 1 if bad else 0
+
+
 def cmd_cutout(a) -> int:
     from PIL import Image
 
@@ -363,6 +402,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--loss", action="store_true", help="lista o que a cena declara e o backend não leva ao gerador")
     s.add_argument("--strict", action="store_true", help="falha (código 3) se houver perda real ou a cena não tiver asserts")
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
+
+    s = sub.add_parser("locate", help="mede onde as entidades ficaram na imagem e detecta espelhamento")
+    s.add_argument("scene"); s.add_argument("image", nargs="?")
+    s.add_argument("--boxes", help="JSON {id: [x,y,w,h]} de quem olhou a imagem")
+    s.add_argument("--form", action="store_true", help="gera o pedido para um modelo de visão devolver as caixas")
+    s.set_defaults(fn=cmd_locate)
 
     s = sub.add_parser("check", help="roda os asserts sobre o layout (sem imagem)")
     s.add_argument("scene"); s.set_defaults(fn=cmd_check)

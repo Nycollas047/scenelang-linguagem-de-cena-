@@ -72,6 +72,13 @@ Evita anatomia impossível: cada junta recebe um ângulo e a linguagem rejeita o
 - `hold`: o que cada mão/pé segura (`left_hand`, `right_hand`, `left_foot`, `right_foot`).
 - Fora da faixa: erro com `fix` (limita ao máximo); perto do limite: aviso; corpo de costas sem girar o pescoço: aviso.
 
+## Onde as coisas ficaram na imagem (v0.4)
+`scenelang locate cena.yaml imagem.png [--boxes achados.json]` mede a caixa de cada entidade na imagem pronta, compara com a declarada,
+acusa **espelhamento** e reavalia os asserts de posição (`left_of`, `above`, `inside`...) sobre as caixas medidas.
+- `signature: ["#a42625", "#551014"]` (na entidade, 1 a 3 cores): o código acha esses pixels sem modelo de visão; serve quando a cor é distintiva.
+- `--boxes`: caixas `{id: [x, y, w, h]}` de quem olhou a imagem; `locate cena.yaml --form` gera o pedido para um modelo de visão.
+- `scenelang render` desenha um esqueleto de palitos para entidades com `pose` (D = lado direito do personagem, E = esquerdo).
+
 ## Relatório de perdas (v0.4)
 `scenelang compile cena.yaml --loss` lista o que o backend não leva ao gerador (`lost`, `approx`, `unchecked`);
 `--strict` falha com código 3 se há parte sem tradução ou a cena não tem asserts. O backend `regions` agora leva

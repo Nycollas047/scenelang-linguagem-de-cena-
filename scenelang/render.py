@@ -12,6 +12,7 @@ from html import escape
 from pathlib import Path
 
 from . import guides as G
+from . import skeleton
 from . import layout as L
 from . import vocab as V
 from .assertions import evaluate_all, parse_assert
@@ -93,6 +94,9 @@ def render_svg(scene: Scene, width: int = 960) -> str:
             small = w * W < 120
             ty = py(y) - 5 if small else py(y) + 16
             o.append(f'<text x="{px(x) + (0 if small else 8):.1f}" y="{ty:.1f}" font-size="12" font-weight="600" fill="{INK}">{escape(e.id)}</text></g>')
+            raw_pose = next((r.get("pose") for r in scene.data["entities"] if r.get("id") == e.id), None)
+            if isinstance(raw_pose, dict):
+                o.append(skeleton.svg(raw_pose, (px(x), py(y), w * W, h * H)))
             if e.orient and V.DIRECTIONS[e.orient] != (0, 0):
                 bx, by = L.anchor_xy(e.box, e.orient, "base")
                 tx, ty2 = L.anchor_xy(e.box, e.orient, "tip")

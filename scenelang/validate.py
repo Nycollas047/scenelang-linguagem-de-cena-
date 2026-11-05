@@ -17,7 +17,7 @@ from . import layout as L
 from . import vocab as V
 from .assertions import AssertSyntaxError, check_refs, parse_assert
 from .model import SLUG, Diagnostic, RefError, Scene, build_scene
-from . import character, fx, guides, lint, materials, pose, palette as pal_layer
+from . import character, fx, guides, lint, locate, materials, pose, palette as pal_layer
 from . import variants
 from . import verify as verify_mod
 from .negations import to_affirmation
@@ -32,7 +32,7 @@ REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
 ENTITY_KEYS = {
     "id", "kind", "label", "desc", "plane", "at", "size", "box", "orient",
     "brightness", "saturation", "tags", "details",
-    "wind_parts", "translucent", "material", "parts", "detail", "character", "pose",
+    "wind_parts", "translucent", "material", "parts", "detail", "character", "pose", "signature",
 }
 LIGHT_KEYS = {"role", "color", "source", "hits", "note"}
 CAMERA_KEYS = {"angle", "lens", "focus", "depth_blur"}
@@ -218,6 +218,7 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
     materials.check(c, data)
     character.check(c, data, scene)
     pose.check(c, data, scene)
+    locate.check(c, data)
     _check_lock(c, data, scene)
     verify_mod.check(c, data)
     lint.check(c, data, scene)
@@ -405,7 +406,11 @@ def _check_asserts(c: _Collector, data: dict, scene: Scene | None) -> None:
         try:
             a = parse_assert(raw)
         except AssertSyntaxError as e:
-            c.error(p, str(e), got=raw, accepted=list(V.PREDICATES), hint=_suggest(raw.split("(")[0].strip(), V.PREDICATES))
+            hint = _suggest(raw.split("(")[0].strip(), V.PREDICATES)
+            if raw.count("(") != raw.count(")"):
+                hint = ("em YAML, a vírgula dentro de [ ] separa itens: escreva os asserts como lista em bloco "
+                        "(`- left_of(a, b)`) ou entre aspas (`[\"left_of(a, b)\"]`)")
+            c.error(p, str(e), got=raw, accepted=list(V.PREDICATES), hint=hint)
             continue
         if a.name == "count" and a.args[0] not in (data.get("glossary") or {}):
             c.warn(p, "count sem glossário: o prompt sairia com a etiqueta crua", got=a.args[0],
