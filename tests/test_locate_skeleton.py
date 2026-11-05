@@ -47,7 +47,7 @@ def make(a_x, b_x):
 def run(im):
     _, scene, _ = load_text(SCENE)
     found = LC.locate_by_signature(scene, im)
-    items = LC.compare(scene, found, {k: "assinatura" for k in found})
+    items = LC.compare(scene, found, {k: "informada" for k in found})
     return scene, found, items
 
 
@@ -128,3 +128,19 @@ def test_manequim_marca_do_rosto_some_de_costas():
 def test_referencia_tem_fundo_liso_e_um_manequim():
     svg = skeleton.reference_svg({"body_yaw": 30})
     assert svg.count('class="pose mannequin"') == 1 and "<rect" in svg
+
+
+def test_so_duas_entidades_por_cor_nao_decide_espelhamento():
+    scene, found, _ = run(make(0.70, 0.05))
+    items = LC.compare(scene, found, {k: "assinatura" for k in found})
+    assert LC.mirror_verdict(items)[0] == "incerto"
+
+
+def test_assinaturas_parecidas_geram_aviso():
+    d, _, _ = load_text(SCENE.replace('"#0000d0"', '"#d00a0a"'))
+    assert any(x.level == "warning" and "assinaturas" in x.message for x in d)
+
+
+def test_caixa_por_cor_muito_maior_nao_e_confiavel():
+    assert not LC.reliable((0.1, 0.1, 0.1, 0.1), (0.0, 0.0, 0.5, 0.5))
+    assert LC.reliable((0.1, 0.1, 0.1, 0.1), (0.1, 0.1, 0.12, 0.12))

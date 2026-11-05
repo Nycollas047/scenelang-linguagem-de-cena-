@@ -73,13 +73,21 @@ def locate_by_signature(scene, image) -> dict[str, tuple]:
     np, _ = _np()
     f = Frame(scene, image)
     found = {}
+    sigs = {e.id: _signature_colors(scene, e.id) for e in scene.entities}
+    masks = {}
+    for eid, cols in sigs.items():
+        if cols:
+            m = np.zeros(f.rgb.shape[:2], bool)
+            for rgb in cols:
+                m |= _de(f.lab, rgb) <= SIG_TOL
+            masks[eid] = m
+    if len(masks) > 1:   # pixel que casa com a assinatura de duas entidades não identifica nenhuma
+        count = sum(m.astype(np.uint8) for m in masks.values())
+        masks = {k: m & (count == 1) for k, m in masks.items()}
     for e in scene.entities:
-        cols = _signature_colors(scene, e.id)
-        if not cols:
+        if e.id not in masks:
             continue
-        mask = np.zeros(f.rgb.shape[:2], bool)
-        for rgb in cols:
-            mask |= _de(f.lab, rgb) <= SIG_TOL
+        mask = masks[e.id]
         mask = ndimage.binary_opening(mask, iterations=2)
         lab, n = ndimage.label(mask)
         if not n:
@@ -98,6 +106,11 @@ def locate_by_signature(scene, image) -> dict[str, tuple]:
     return found
 
 
+def reliable(declared, measured, factor: float = 2.5) -> bool:
+    """Caixa medida por cor só é confiável se não for muito maior que a declarada (cor usada por outras coisas espalha a caixa)."""
+    return measured[2] * measured[3] <= factor * declared[2] * declared[3] + 1e-9
+
+
 def compare(scene, measured: dict[str, tuple], source: dict[str, str] | None = None) -> list[Found]:
     return [Found(e.id, e.box, tuple(measured[e.id]) if e.id in measured else None, (source or {}).get(e.id, "informada"))
             for e in scene.entities if e.id in measured]
@@ -106,8 +119,10 @@ def compare(scene, measured: dict[str, tuple], source: dict[str, str] | None = N
 def mirror_verdict(items: list[Found]) -> tuple[str, str]:
     """('ok'|'espelhada'|'incerto', detalhe). Compara o erro de x contra o erro com a cena espelhada."""
     pts = [(i.declared[0] + i.declared[2] / 2, i.measured[0] + i.measured[2] / 2) for i in items if i.measured]
-    if len(pts) < 2:
-        return "incerto", "menos de 2 entidades medidas"
+    by_color = any(i.source == "assinatura" for i in items if i.measured)
+    need = 3 if by_color else 2   # cor de assinatura pode ser confundida com outra coisa: exige mais entidades concordando
+    if len(pts) < need:
+        return "incerto", f"menos de {need} entidades medidas" + (" (medição por cor; use --boxes para confirmar)" if by_color else "")
     direct = sum(abs(d - m) for d, m in pts) / len(pts)
     mirrored = sum(abs((1 - d) - m) for d, m in pts) / len(pts)
     spread = max(d for d, _ in pts) - min(d for d, _ in pts)
@@ -159,7 +174,29 @@ Exemplo: {{"{scene.entities[0].id}": [0.10, 0.20, 0.30, 0.60]}}
 
 
 def check(c, data: dict) -> None:
-    """Valida `signature` nas entidades: 1 a 3 cores."""
+    """Valida `signature` nas entidades: 1 a 3 cores, e avisa quando duas entidades têm assinaturas parecidas."""
+    _check_each(c, data)
+    sigs = {}
+    for e in data.get("entities") or []:
+        if isinstance(e, dict) and e.get("signature"):
+            cols = []
+            for v in e["signature"] if isinstance(e["signature"], list) else [e["signature"]]:
+                try:
+                    rgb = PAL.resolve_spec(data, v)
+                except C.ColorError:
+                    rgb = None
+                if rgb is not None:
+                    cols.append(rgb)
+            sigs[e.get("id")] = cols
+    ids = list(sigs)
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            if any(C.delta_e(x, y) < 25 for x in sigs[a] for y in sigs[b]):
+                c.warn("$.entities", f"as assinaturas de {a!r} e {b!r} são parecidas (ΔE < 25): a medição por cor pode confundir as duas",
+                       hint="escolha uma cor que só uma delas tenha, ou use `locate --boxes`")
+
+
+def _check_each(c, data: dict) -> None:
     for i, e in enumerate(data.get("entities") or []):
         if not isinstance(e, dict) or "signature" not in e:
             continue

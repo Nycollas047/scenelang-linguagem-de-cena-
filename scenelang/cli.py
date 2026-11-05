@@ -228,6 +228,13 @@ def cmd_locate(a) -> int:
             if v is not None and k in scene.by_id:
                 measured[k], source[k] = tuple(v), "informada"
     items = LC.compare(scene, measured, source)
+    weak = {i.id for i in items if i.source == "assinatura" and not LC.reliable(i.declared, i.measured)}
+    for i in items:
+        if i.id in weak:
+            print(f"· {i.id}: medida por cor pouco confiável (caixa {i.measured[2] * i.measured[3] / (i.declared[2] * i.declared[3]):.1f}× a declarada); ignorada",
+                  file=sys.stderr)
+    items = [i for i in items if i.id not in weak]
+    measured = {i.id: i.measured for i in items}
     if not items:
         print("nenhuma entidade localizada: declare `signature` nas entidades ou passe --boxes", file=sys.stderr)
         return 2
