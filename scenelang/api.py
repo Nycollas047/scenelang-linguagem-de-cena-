@@ -152,7 +152,8 @@ def correct_round(text: str, image_path: str, out_dir: str, boxes: dict | None =
     scene, err = _scene(text)
     if err:
         return err
-    findings, items = CR.measure(scene, Image.open(image_path), boxes)
+    m = CR.measure_full(scene, Image.open(image_path), boxes)
+    findings, items = m.findings, m.items
     if not findings:
         return {"ok": False, "errors": [{"message": "nada a medir: declare `verify`, `signature` nas entidades ou informe `boxes`"}]}
     new, pl = CR.next_scene_plan(scene, findings, items, Path(image_path).name)
@@ -163,7 +164,7 @@ def correct_round(text: str, image_path: str, out_dir: str, boxes: dict | None =
         return {"ok": False, "errors": [d.to_dict() for d in diags if d.level == "error"]}
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    rel = CR.report(scene, findings, items, Path(image_path).name, pl)
+    rel = CR.report(scene, findings, items, Path(image_path).name, pl, m.located, m.skipped_asserts)
     (out / "relatorio.json").write_text(json.dumps(rel, ensure_ascii=False, indent=2, default=plain), encoding="utf-8")
     (out / "cena.next.yaml").write_text(new_text, encoding="utf-8")
     prompt_next = to_prose(ok_scene)
@@ -181,21 +182,15 @@ def locate_image(text: str, image_path: str, boxes: dict | None = None) -> dict:
     scene, err = _scene(text)
     if err:
         return err
-    img = Image.open(image_path)
-    measured, source = {}, {}
-    for k, v in LC.locate_by_signature(scene, img).items():
-        measured[k], source[k] = v, "assinatura"
-    for k, v in (boxes or {}).items():
-        if v is not None and k in scene.by_id:
-            measured[k], source[k] = tuple(v), "informada"
-    items = LC.compare(scene, measured, source)
-    items = [i for i in items if not (i.source == "assinatura" and not LC.reliable(i.declared, i.measured))]
+    located = LC.locate_detailed(scene, Image.open(image_path), boxes)
+    items = LC.usable(located)
+    rows = [{"id": i.id, "status": i.status, "source": i.source, "confidence": i.confidence, "reason": i.reason, "declared": list(i.declared),
+             "measured": list(i.measured) if i.measured else None, "iou": LC.iou(i.declared, i.measured) if i.measured else None} for i in located]
     if not items:
-        return {"ok": False, "errors": [{"message": "nenhuma entidade localizada: declare `signature` ou informe `boxes` [x,y,w,h] normalizadas"}]}
+        return {"ok": False, "entities": rows, "errors": [{"message": "nenhuma entidade localizada com segurança: declare `signature` ou informe `boxes` [x,y,w,h] normalizadas"}]}
     verdict, detail = LC.mirror_verdict(items)
     res, skipped = LC.recheck_asserts(scene, {i.id: i.measured for i in items})
-    return {"ok": verdict != "espelhada" and all(r.ok for r in res), "mirror": verdict, "mirror_detail": detail,
-            "entities": [{"id": i.id, "declared": list(i.declared), "measured": list(i.measured), "iou": LC.iou(i.declared, i.measured), "source": i.source} for i in items],
+    return {"ok": verdict != "espelhada" and all(r.ok for r in res), "mirror": verdict, "mirror_detail": detail, "entities": rows,
             "asserts": [{"assert": r.raw, "ok": r.ok, "detail": r.detail} for r in res], "skipped_asserts": skipped}
 
 

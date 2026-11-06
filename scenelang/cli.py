@@ -219,36 +219,27 @@ def cmd_locate(a) -> int:
         return 2
     from PIL import Image
 
-    measured, source = {}, {}
-    img = Image.open(a.image)
-    for k, v in LC.locate_by_signature(scene, img).items():
-        measured[k], source[k] = v, "assinatura"
-    if a.boxes:
-        for k, v in json.loads(Path(a.boxes).read_text(encoding="utf-8")).items():
-            if v is not None and k in scene.by_id:
-                measured[k], source[k] = tuple(v), "informada"
-    items = LC.compare(scene, measured, source)
-    weak = {i.id for i in items if i.source == "assinatura" and not LC.reliable(i.declared, i.measured)}
-    for i in items:
-        if i.id in weak:
-            print(f"· {i.id}: medida por cor pouco confiável (caixa {i.measured[2] * i.measured[3] / (i.declared[2] * i.declared[3]):.1f}× a declarada); ignorada",
-                  file=sys.stderr)
-    items = [i for i in items if i.id not in weak]
-    measured = {i.id: i.measured for i in items}
+    boxes = json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None
+    located = LC.locate_detailed(scene, Image.open(a.image), boxes)
+    for it in located:
+        d = it.declared
+        if it.measured:
+            m = it.measured
+            print(f"{it.id:<12} {it.status:<22} declarada x={d[0]:.2f} y={d[1]:.2f} w={d[2]:.2f} h={d[3]:.2f} | medida x={m[0]:.2f} y={m[1]:.2f} "
+                  f"w={m[2]:.2f} h={m[3]:.2f} | IoU {LC.iou(d, m):.2f} ({it.source}, confiança {it.confidence:.2f})" + (f"  · {it.reason}" if it.reason else ""))
+        else:
+            print(f"{it.id:<12} {it.status:<22} sem caixa medida ({it.source})  · {it.reason}")
+    items = LC.usable(located)
     if not items:
-        print("nenhuma entidade localizada: declare `signature` nas entidades ou passe --boxes", file=sys.stderr)
+        print("nenhuma entidade localizada com segurança: declare `signature` nas entidades ou passe --boxes", file=sys.stderr)
         return 2
-    for it in items:
-        d, m = it.declared, it.measured
-        print(f"{it.id:<12} declarada x={d[0]:.2f} y={d[1]:.2f} w={d[2]:.2f} h={d[3]:.2f} | medida x={m[0]:.2f} y={m[1]:.2f} w={m[2]:.2f} h={m[3]:.2f} "
-              f"| IoU {LC.iou(d, m):.2f} ({it.source})")
     verdict, detail = LC.mirror_verdict(items)
     print(f"\nespelhamento: {verdict} ({detail})")
-    res, skipped = LC.recheck_asserts(scene, measured)
+    res, skipped = LC.recheck_asserts(scene, {i.id: i.measured for i in items})
     for r in res:
         print(f"{'✓' if r.ok else '✗'} {r.raw:<40} {r.detail}")
     for raw in skipped:
-        print(f"· {raw:<40} sem medida de todas as entidades")
+        print(f"· {raw:<40} não avaliado: falta medição confiável de alguma entidade (não é prova de falha)")
     bad = verdict == "espelhada" or any(not r.ok for r in res)
     return 1 if bad else 0
 
@@ -280,7 +271,8 @@ def cmd_correct(a) -> int:
     scene, _ = _load(a.scene)
     boxes = json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None
     img = Image.open(a.image)
-    findings, items = CR.measure(scene, img, boxes)
+    m = CR.measure_full(scene, img, boxes)
+    findings, items = m.findings, m.items
     if not findings:
         print("nada a medir: declare `verify`, `signature` nas entidades ou passe --boxes", file=sys.stderr)
         return 2
@@ -290,7 +282,7 @@ def cmd_correct(a) -> int:
     corr = pl.texts()
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name, pl), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name, pl, m.located, m.skipped_asserts), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     from .evalform import dump_scene
 
     new_text = dump_scene(new)

@@ -15,7 +15,7 @@ Responsabilidades (pacote `scenelang.correction`):
 from __future__ import annotations
 
 import copy
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 
 from . import canon
 from . import locate as LC
@@ -23,7 +23,7 @@ from . import verify as ver
 from .correction import MAX_CORRECTIONS, RULES, CorrectionHistory, Finding, Plan, classify
 from .correction import plan as _plan
 
-__all__ = ["Finding", "MAX_CORRECTIONS", "measure", "plan_round", "corrections", "next_scene", "next_scene_plan", "report"]
+__all__ = ["Finding", "MAX_CORRECTIONS", "Measurement", "measure_full", "measure", "plan_round", "corrections", "next_scene", "next_scene_plan", "report"]
 
 
 def _source(items) -> str:
@@ -31,29 +31,37 @@ def _source(items) -> str:
     return next(iter(srcs)) if len(srcs) == 1 else "mista"
 
 
-def measure(scene, image, boxes: dict | None = None) -> tuple[list[Finding], list[LC.Found]]:
-    """Roda todas as medições possíveis. `boxes` são caixas {id: [x,y,w,h]} de quem olhou a imagem."""
+@dataclass
+class Measurement:
+    findings: list
+    items: list            # só as entidades `localizada`: sustentam espelhamento e asserts de posição
+    located: list          # TODAS as entidades, cada uma com estado, confiança e motivo
+    skipped_asserts: list  # asserts de posição que não puderam ser avaliados (faltou medição confiável de alguma entidade)
+
+
+def measure_full(scene, image, boxes: dict | None = None) -> Measurement:
+    """Roda todas as medições possíveis. `boxes` são caixas {id: [x,y,w,h]} de quem olhou a imagem (null = não aparece)."""
     out: list[Finding] = []
     for r in ver.run(scene, image):
         out.append(Finding("verify", r.raw, r.ok, r.detail, "imagem"))
-    measured, source = {}, {}
-    for k, v in LC.locate_by_signature(scene, image).items():
-        measured[k], source[k] = v, "assinatura"
-    for k, v in (boxes or {}).items():
-        if v is not None and k in scene.by_id:
-            measured[k], source[k] = tuple(v), "informada"
-    items = LC.compare(scene, measured, source)
-    items = [i for i in items if i.source != "assinatura" or LC.reliable(i.declared, i.measured)]
-    measured = {i.id: i.measured for i in items}
+    located = LC.locate_detailed(scene, image, boxes)
+    items = LC.usable(located)
+    skipped: list = []
     if items:
         src = _source(items)
+        conf = min(i.confidence for i in items)
         verdict, detail = LC.mirror_verdict(items)
         if verdict != "incerto":
-            out.append(Finding("mirror", "espelhamento", verdict == "ok", f"{verdict} ({detail})", src))
-        res, _ = LC.recheck_asserts(scene, measured)
+            out.append(Finding("mirror", "espelhamento", verdict == "ok", f"{verdict} ({detail})", src, conf))
+        res, skipped = LC.recheck_asserts(scene, {i.id: i.measured for i in items})
         for r in res:
-            out.append(Finding("layout", r.raw, r.ok, r.detail, src))
-    return out, items
+            out.append(Finding("layout", r.raw, r.ok, r.detail, src, conf))
+    return Measurement(out, items, located, skipped)
+
+
+def measure(scene, image, boxes: dict | None = None) -> tuple[list[Finding], list[LC.Found]]:
+    m = measure_full(scene, image, boxes)
+    return m.findings, m.items
 
 
 def plan_round(scene, findings: list[Finding], items: list[LC.Found], history: CorrectionHistory | None = None) -> Plan:
@@ -95,7 +103,8 @@ def _has_rule(name: str) -> bool:
     return any(name in r.checks or (not r.checks and name == r.kind) for r in RULES)
 
 
-def report(scene, findings: list[Finding], items: list[LC.Found], image_name: str = "", pl: Plan | None = None) -> dict:
+def report(scene, findings: list[Finding], items: list[LC.Found], image_name: str = "", pl: Plan | None = None,
+           located: list[LC.Found] | None = None, skipped_asserts: list | None = None) -> dict:
     """Registro estruturado da rodada (dado de avaliação). `hash_cena` é o hash canônico (`canon-v1-sha256`) da cena semântica."""
     hist = CorrectionHistory(scene.data.get("history"))
     pl = pl or _plan(scene, findings, items, hist)
@@ -105,8 +114,11 @@ def report(scene, findings: list[Finding], items: list[LC.Found], image_name: st
             "rodada": hist.next_round, "imagem": image_name,
             "ok": all(f.ok for f in findings),
             "medicoes": [{**asdict(f), "classe": classify(f)} for f in findings],
-            "entidades": [{"id": i.id, "declarada": list(i.declared), "medida": list(i.measured), "fonte": i.source,
-                           "iou": round(LC.iou(i.declared, i.measured), 3)} for i in items],
+            "entidades": [{"id": i.id, "declarada": list(i.declared), "medida": list(i.measured) if i.measured else None, "fonte": i.source,
+                           "estado": i.status, "confianca": i.confidence, "motivo": i.reason,
+                           "iou": round(LC.iou(i.declared, i.measured), 3) if i.measured else None} for i in (located if located is not None else items)],
+            "nao_medidos": {"asserts": list(skipped_asserts or []),
+                            "entidades": [{"id": i.id, "estado": i.status, "motivo": i.reason} for i in (located or []) if i.status != LC.LOCALIZADA]},
             "correcoes": [asdict(c) | {"chave": c.key} for c in pl.applied],
             "adiadas": [asdict(s) for s in pl.deferred],
             "nao_resolvidas": [asdict(s) for s in pl.unresolved],

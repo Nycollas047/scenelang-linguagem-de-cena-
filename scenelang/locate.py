@@ -23,6 +23,19 @@ from .assertions import evaluate, parse_assert
 POSITION_PREDICATES = {"above", "below", "left_of", "right_of", "inside", "near", "visible"}
 MIN_AREA = 0.002          # fração do quadro: abaixo disso é ruído, não entidade
 SIG_TOL = 14.0            # ΔE (CIE76) aceito em torno da cor-assinatura
+SPREAD_FACTOR = 2.5       # caixa medida por cor maior que isto × a declarada: a cor está espalhada em outras coisas
+PARTIAL_FRACTION = 0.3    # área medida < isto × declarada: só parte da entidade foi achada
+SPLIT_DISTANCE = 0.35     # blocos da mesma cor mais distantes que isto (fração do quadro): possivelmente duas coisas
+EDGE = 0.005
+
+# Estados de uma medição. Só "localizada" entra no veredito de espelhamento e nos asserts de posição.
+LOCALIZADA = "localizada"
+PARCIAL = "parcial"                       # achada em parte (cortada pelo quadro, escondida, ou a cor cobre só um pedaço)
+NAO_LOCALIZADA = "nao_localizada"         # quem olhou a imagem disse que o item NÃO aparece (evidência positiva de ausência)
+INSUFICIENTE = "evidencia_insuficiente"   # não deu para medir: ausência de evidência, NÃO prova de ausência
+AMBIGUA = "ambigua"                       # há evidência, mas ela serve a mais de uma leitura
+STATUSES = (LOCALIZADA, PARCIAL, NAO_LOCALIZADA, INSUFICIENTE, AMBIGUA)
+SOURCES = ("assinatura", "informada", "nenhuma")
 
 
 @dataclass
@@ -30,7 +43,10 @@ class Found:
     id: str
     declared: tuple
     measured: tuple | None
-    source: str           # "assinatura" | "informada"
+    source: str           # "assinatura" | "informada" | "nenhuma" (nada foi tentado/medido); "desconhecida" só em chamadas antigas
+    status: str = LOCALIZADA
+    confidence: float | None = None
+    reason: str = ""
 
     @property
     def dx(self) -> float | None:
@@ -65,45 +81,130 @@ def _signature_colors(scene, ent_id: str):
     return [c for c in out if c is not None]
 
 
-def locate_by_signature(scene, image) -> dict[str, tuple]:
+def _analyze_signatures(scene, image) -> dict[str, dict]:
+    """Por entidade com `signature`: caixa (se achou) e os indícios que dizem o quanto confiar nela."""
     from scipy import ndimage
 
     from .verify import Frame, _de, _np
 
     np, _ = _np()
     f = Frame(scene, image)
-    found = {}
     sigs = {e.id: _signature_colors(scene, e.id) for e in scene.entities}
-    masks = {}
+    raw = {}
     for eid, cols in sigs.items():
         if cols:
             m = np.zeros(f.rgb.shape[:2], bool)
             for rgb in cols:
                 m |= _de(f.lab, rgb) <= SIG_TOL
-            masks[eid] = m
-    if len(masks) > 1:   # pixel que casa com a assinatura de duas entidades não identifica nenhuma
-        count = sum(m.astype(np.uint8) for m in masks.values())
-        masks = {k: m & (count == 1) for k, m in masks.items()}
+            raw[eid] = m
+    count = sum(m.astype(np.uint8) for m in raw.values()) if len(raw) > 1 else None
+    out: dict[str, dict] = {}
     for e in scene.entities:
-        if e.id not in masks:
+        if e.id not in raw:
             continue
-        mask = masks[e.id]
+        m_raw = raw[e.id]
+        n_raw = int(m_raw.sum())
+        info = {"raw_fraction": n_raw / m_raw.size, "shared": 0.0, "shared_with": [], "box": None, "components": 0, "split": False}
+        mask = m_raw & (count == 1) if count is not None else m_raw   # pixel que casa com duas assinaturas não identifica nenhuma
+        if n_raw:
+            info["shared"] = 1 - int(mask.sum()) / n_raw
+            info["shared_with"] = [k for k, o in raw.items() if k != e.id and (o & m_raw).any()]
         mask = ndimage.binary_opening(mask, iterations=2)
         lab, n = ndimage.label(mask)
-        if not n:
+        info["components"] = int(n)
+        if n:
+            sizes = ndimage.sum(mask, lab, range(1, n + 1))
+            # une blocos próximos (casaco + mangas): fica com os que somam ≥ 25% do maior, no entorno do maior
+            keep = [i + 1 for i, sz in enumerate(sizes) if sz >= 0.25 * sizes.max()]
+            sel = np.isin(lab, keep)
+            if sel.sum() / sel.size >= MIN_AREA:
+                ys, xs = np.where(sel)
+                # percentis 1–99: um pixel solto longe do personagem não estica a caixa
+                x0, x1 = np.percentile(xs, 1) / f.W, (np.percentile(xs, 99) + 1) / f.W
+                y0, y1 = np.percentile(ys, 1) / f.H, (np.percentile(ys, 99) + 1) / f.H
+                info["box"] = (round(x0, 4), round(y0, 4), round(x1 - x0, 4), round(y1 - y0, 4))
+                if len(keep) > 1:
+                    cs = [ndimage.center_of_mass(lab == k) for k in keep]
+                    far = max(((a[1] - b_[1]) / f.W) ** 2 + ((a[0] - b_[0]) / f.H) ** 2 for a in cs for b_ in cs) ** 0.5
+                    info["split"] = far > SPLIT_DISTANCE
+        out[e.id] = info
+    return out
+
+
+def locate_by_signature(scene, image) -> dict[str, tuple]:
+    """Caixas achadas por cor (compatibilidade: sem estados). Para saber o quanto confiar em cada uma, use `locate_detailed`."""
+    return {k: v["box"] for k, v in _analyze_signatures(scene, image).items() if v["box"] is not None}
+
+
+def _touches_edge(box) -> bool:
+    return box[0] <= EDGE or box[1] <= EDGE or box[0] + box[2] >= 1 - EDGE or box[1] + box[3] >= 1 - EDGE
+
+
+def _judge(e, box, source: str, info: dict | None = None) -> Found:
+    """Estado, confiança e motivo de UMA medição. `info` traz os indícios da medição por cor."""
+    area_ratio = box[2] * box[3] / max(e.box[2] * e.box[3], 1e-9)
+    if source == "informada":
+        conf, status, why = 0.9, LOCALIZADA, ""
+    else:
+        conf = max(0.2, 0.6 - 0.3 * (info or {}).get("shared", 0.0))
+        status, why = LOCALIZADA, ""
+        if area_ratio > SPREAD_FACTOR:
+            status, why = AMBIGUA, f"a cor aparece espalhada: a caixa medida é {area_ratio:.1f}× a declarada (outras coisas têm a mesma cor)"
+        elif (info or {}).get("split"):
+            status, why = AMBIGUA, "a cor forma blocos distantes entre si: pode haver mais de uma coisa com ela"
+        elif (info or {}).get("shared", 0) > 0.5:
+            status, why = AMBIGUA, f"{(info or {})['shared']:.0%} dos pixels com esta cor também casam com a assinatura de {', '.join((info or {}).get('shared_with', []))}"
+    if status == LOCALIZADA:
+        if _touches_edge(box) and not _touches_edge(e.box):
+            status, why = PARCIAL, "a caixa encosta na borda do quadro: o item pode estar cortado"
+        elif area_ratio < PARTIAL_FRACTION:
+            status, why = PARCIAL, f"só {area_ratio:.0%} da área declarada foi encontrada (item escondido, menor ou só parte dele tem a cor)"
+    return Found(e.id, e.box, tuple(box), source, status, round(conf, 2), why)
+
+
+def locate_detailed(scene, image=None, boxes: dict | None = None, only: list[str] | None = None) -> list[Found]:
+    """Uma `Found` por entidade, SEMPRE com estado: ninguém some em silêncio.
+
+    - `boxes[id] = [x,y,w,h]`: caixa informada por quem olhou a imagem (vale mais que a cor);
+    - `boxes[id] = None`: quem olhou disse que o item não aparece → `nao_localizada` (única prova de ausência);
+    - só a cor da `signature`: `localizada` / `parcial` / `ambigua`, ou `evidencia_insuficiente` quando a cor não aparece
+      (o gerador pode ter trocado a cor: isso NÃO prova que o item sumiu);
+    - sem assinatura nem caixa: `evidencia_insuficiente` com source "nenhuma".
+    """
+    boxes = boxes or {}
+    sig = _analyze_signatures(scene, image) if image is not None else {}
+    out: list[Found] = []
+    for e in scene.entities:
+        if only is not None and e.id not in only:
             continue
-        sizes = ndimage.sum(mask, lab, range(1, n + 1))
-        # une blocos próximos (casaco + mangas): fica com os que somam ≥ 25% do maior, no entorno do maior
-        keep = [i + 1 for i, s in enumerate(sizes) if s >= 0.25 * sizes.max()]
-        sel = np.isin(lab, keep)
-        if sel.sum() / sel.size < MIN_AREA:
+        if e.id in boxes:
+            b = boxes[e.id]
+            if b is None:
+                out.append(Found(e.id, e.box, None, "informada", NAO_LOCALIZADA, 0.9, "quem olhou a imagem informou que o item não aparece"))
+            else:
+                out.append(_judge(e, tuple(b), "informada"))
             continue
-        ys, xs = np.where(sel)
-        # percentis 1–99: um pixel solto longe do personagem não estica a caixa
-        x0, x1 = np.percentile(xs, 1) / f.W, (np.percentile(xs, 99) + 1) / f.W
-        y0, y1 = np.percentile(ys, 1) / f.H, (np.percentile(ys, 99) + 1) / f.H
-        found[e.id] = (round(x0, 4), round(y0, 4), round(x1 - x0, 4), round(y1 - y0, 4))
-    return found
+        info = sig.get(e.id)
+        if info is None:
+            has_sig = bool(_signature_colors(scene, e.id))
+            out.append(Found(e.id, e.box, None, "assinatura" if has_sig else "nenhuma", INSUFICIENTE, 0.0,
+                             "a imagem não foi lida" if has_sig and image is None else
+                             "sem `signature` e sem caixa informada: nada para medir"))
+        elif info["box"] is None:
+            why = ("a cor da assinatura quase não aparece (o gerador pode ter trocado as cores)" if info["raw_fraction"] < MIN_AREA
+                   else "os pixels com a cor da assinatura são poucos ou dispersos demais depois de tirar o que casa com outras entidades")
+            st = AMBIGUA if info["shared"] > 0.5 else INSUFICIENTE
+            if st == AMBIGUA:
+                why = f"{info['shared']:.0%} dos pixels com esta cor também casam com a assinatura de {', '.join(info['shared_with'])}"
+            out.append(Found(e.id, e.box, None, "assinatura", st, 0.0, why))
+        else:
+            out.append(_judge(e, info["box"], "assinatura", info))
+    return out
+
+
+def usable(items: list[Found]) -> list[Found]:
+    """Medições que podem sustentar veredito de espelhamento e asserts de posição: só as `localizada`."""
+    return [i for i in items if i.status == LOCALIZADA and i.measured is not None]
 
 
 def reliable(declared, measured, factor: float = 2.5) -> bool:
@@ -112,17 +213,23 @@ def reliable(declared, measured, factor: float = 2.5) -> bool:
 
 
 def compare(scene, measured: dict[str, tuple], source: dict[str, str] | None = None) -> list[Found]:
-    return [Found(e.id, e.box, tuple(measured[e.id]) if e.id in measured else None, (source or {}).get(e.id, "informada"))
-            for e in scene.entities if e.id in measured]
+    """Compatibilidade: `Found` das entidades medidas. A origem NÃO é presumida: sem `source[id]` fica "desconhecida",
+    que o veredito de espelhamento trata como a origem mais fraca (por cor)."""
+    return [Found(e.id, e.box, tuple(measured[e.id]), (source or {}).get(e.id, "desconhecida")) for e in scene.entities if e.id in measured]
 
 
 def mirror_verdict(items: list[Found]) -> tuple[str, str]:
-    """('ok'|'espelhada'|'incerto', detalhe). Compara o erro de x contra o erro com a cena espelhada."""
+    """('ok'|'espelhada'|'incerto', detalhe). Compara o erro de x contra o erro com a cena espelhada.
+    Só medições `localizada` votam; parciais, ambíguas e sem evidência ficam de fora (e o detalhe diz quantas)."""
+    total = len(items)
+    items = [i for i in items if i.status == LOCALIZADA and i.measured is not None]
+    left_out = total - len(items)
     pts = [(i.declared[0] + i.declared[2] / 2, i.measured[0] + i.measured[2] / 2) for i in items if i.measured]
-    by_color = any(i.source == "assinatura" for i in items if i.measured)
+    by_color = any(i.source != "informada" for i in items if i.measured)
     need = 3 if by_color else 2   # cor de assinatura pode ser confundida com outra coisa: exige mais entidades concordando
     if len(pts) < need:
-        return "incerto", f"menos de {need} entidades medidas" + (" (medição por cor; use --boxes para confirmar)" if by_color else "")
+        return "incerto", (f"menos de {need} entidades localizadas" + (f" ({left_out} sem medição confiável)" if left_out else "")
+                           + (" (medição por cor; use --boxes para confirmar)" if by_color else ""))
     direct = sum(abs(d - m) for d, m in pts) / len(pts)
     mirrored = sum(abs((1 - d) - m) for d, m in pts) / len(pts)
     spread = max(d for d, _ in pts) - min(d for d, _ in pts)

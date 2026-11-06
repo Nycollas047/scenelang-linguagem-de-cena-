@@ -10,9 +10,9 @@ requires-python = ">=3.10"
 dependencies = ["PyYAML>=6"]
 
 [project.optional-dependencies]
-image = ["pillow>=10", "numpy>=1.26"]
-mcp = ["mcp>=1.2", "pillow>=10", "numpy>=1.26"]
-dev = ["pytest", "pillow>=10", "numpy>=1.26"]
+image = ["pillow>=10", "numpy>=1.26", "scipy>=1.10"]
+mcp = ["mcp>=1.2", "pillow>=10", "numpy>=1.26", "scipy>=1.10"]
+dev = ["pytest", "pillow>=10", "numpy>=1.26", "scipy>=1.10"]
 
 [project.scripts]
 scenelang = "scenelang.cli:main"
