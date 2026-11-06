@@ -316,14 +316,27 @@ def cmd_pack(a) -> int:
 
     scene, _ = _load(a.scene)
     text = Path(a.scene).read_text(encoding="utf-8")
-    for p in PK.pack(scene, text, a.out_dir, a.only, a.labels, a.width, a.guide_style):
+    try:
+        res = PK.pack_result(scene, text, a.out_dir, a.only, a.labels, a.width, a.guide_style, a.strict)
+    except PK.PackError as e:
+        print(f"pack recusado (--strict): {e}", file=sys.stderr)
+        return 3
+    for p in res["files"]:
         print(f"gravado: {p}")
+    for wmsg in res["warnings"]:
+        print(f"aviso: {wmsg}", file=sys.stderr)
     return 0
 
 
 def cmd_unpack(a) -> int:
     from . import pack as PK
 
+    if a.check:
+        r = PK.unpack_checked(a.image)
+        for pr in r["problems"]:
+            print(f"✗ {pr}", file=sys.stderr)
+        print("pacote íntegro: cena, prompt e hash conferem." if r["ok"] else f"{len(r['problems'])} problema(s) de integridade.")
+        return 0 if r["ok"] else 1
     meta = PK.unpack(a.image)
     if not meta:
         print("a imagem não traz metadados do scenelang", file=sys.stderr)
@@ -516,10 +529,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--width", type=int, default=1024)
     s.add_argument("--guide-style", choices=["blocks", "seg"], default="blocks",
                    help="blocks: retângulos com borda; seg: mapa de segmentação (áreas chapadas, sem borda), para geradores com controle de estrutura")
+    s.add_argument("--strict", action="store_true", help="recusa o pacote (e apaga o que gravou) se algo não puder ser preservado: entidade fora do guia, texto fora dos limites etc.")
     s.set_defaults(fn=cmd_pack)
 
     s = sub.add_parser("unpack", help="lê prompt/cena embutidos nos metadados de um PNG gerado por `pack`")
-    s.add_argument("image"); s.add_argument("what", nargs="?", default="all", choices=["all", "prompt", "yaml", "cena"])
+    s.add_argument("image", help="PNG gerado por `pack` ou a pasta do pacote"); s.add_argument("what", nargs="?", default="all", choices=["all", "prompt", "yaml", "cena", "manifesto", "hash"])
+    s.add_argument("--check", action="store_true", help="verifica a integridade (hash da cena, prompt, arquivos) e falha com código 1 se algo divergir")
     s.set_defaults(fn=cmd_unpack)
 
     s = sub.add_parser("locate", help="mede onde as entidades ficaram na imagem e detecta espelhamento")

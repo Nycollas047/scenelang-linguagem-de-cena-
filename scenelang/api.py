@@ -116,9 +116,13 @@ def pack_files(text: str, out_dir: str, only: str | None = None, guide_style: st
     scene, err = _scene(text)
     if err:
         return err
-    files = PK.pack(scene, text, out_dir, only, None, width, guide_style)
-    prompt = next((p.read_text(encoding="utf-8") for p in files if p.name == "prompt.txt"), None)
-    return {"ok": True, "files": [str(p) for p in files], "prompt": prompt}
+    try:
+        res = PK.pack_result(scene, text, out_dir, only, None, width, guide_style)
+    except PK.PackError as e:
+        return {"ok": False, "errors": [{"message": str(e)}]}
+    prompt = next((p.read_text(encoding="utf-8") for p in res["files"] if p.name == "prompt.txt"), None)
+    return {"ok": True, "files": [str(p) for p in res["files"]], "prompt": prompt, "warnings": res["warnings"],
+            "legend": [{"id": r["id"], "color": r.get("cor")} for r in res["manifest"]["guia"]["entidades"] if r.get("cor")]}
 
 
 def pose_sheet(text: str, entity: str, out_path: str, style: str = "mannequin") -> dict:
