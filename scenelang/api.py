@@ -151,21 +151,22 @@ def correct_round(text: str, image_path: str, out_dir: str, boxes: dict | None =
     findings, items = CR.measure(scene, Image.open(image_path), boxes)
     if not findings:
         return {"ok": False, "errors": [{"message": "nada a medir: declare `verify`, `signature` nas entidades ou informe `boxes`"}]}
-    new, corr = CR.next_scene(scene, findings, items, Path(image_path).name)
+    new, pl = CR.next_scene_plan(scene, findings, items, Path(image_path).name)
+    corr = pl.texts()
     new_text = dump_scene(new)
     diags, ok_scene, _ = load_text(new_text)
     if ok_scene is None:
         return {"ok": False, "errors": [d.to_dict() for d in diags if d.level == "error"]}
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    rel = CR.report(scene, findings, items, Path(image_path).name)
+    rel = CR.report(scene, findings, items, Path(image_path).name, pl)
     (out / "relatorio.json").write_text(json.dumps(rel, ensure_ascii=False, indent=2, default=plain), encoding="utf-8")
     (out / "cena.next.yaml").write_text(new_text, encoding="utf-8")
     prompt_next = to_prose(ok_scene)
     (out / "prompt_next.txt").write_text(prompt_next, encoding="utf-8")
     return {"ok": True, "all_met": all(f.ok for f in findings),
             "findings": [{"kind": f.kind, "check": f.check, "ok": f.ok, "detail": f.detail} for f in findings],
-            "corrections": corr, "next_scene": new_text, "prompt_next": prompt_next, "files": [str(out / n) for n in ("relatorio.json", "cena.next.yaml", "prompt_next.txt")]}
+            "corrections": corr, "deferred": [vars(x) for x in pl.deferred], "unresolved": [vars(x) for x in pl.unresolved], "next_scene": new_text, "prompt_next": prompt_next, "files": [str(out / n) for n in ("relatorio.json", "cena.next.yaml", "prompt_next.txt")]}
 
 
 def locate_image(text: str, image_path: str, boxes: dict | None = None) -> dict:

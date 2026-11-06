@@ -1,33 +1,34 @@
 """Laço de correção automático: imagem gerada → medições → reforço afirmativo → próxima rodada.
 
 Une as medições que já existem (verify, locate, asserts de posição, espelhamento) e transforma cada falha em
-uma frase afirmativa (o que deve aparecer, e onde estava errado), que a próxima compilação põe no prompt.
+uma instrução afirmativa (o que deve aparecer, e onde estava errado), que a próxima compilação põe no prompt.
 Cada rodada deixa um relatório estruturado: é o dado de avaliação (falha medida por código, sem juiz subjetivo).
+
+Responsabilidades (pacote `scenelang.correction`):
+- detecção ......... `measure` (aqui) produz `Finding`;
+- classificação .... `correction.classify` + confiança por origem da medição;
+- instrução ........ `correction.rules` (uma `Rule` por tipo de falha, extensível com `@register`);
+- planejamento ..... `correction.plan` (prioridade, limite, adiamento por evidência fraca, esgotamento);
+- histórico ........ `correction.CorrectionHistory` (tentativas, repetição, compactação);
+- relatório ........ `report` (aqui).
 """
 from __future__ import annotations
 
 import copy
-import hashlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 
+from . import canon
 from . import locate as LC
-from . import phrases as P
 from . import verify as ver
-from .assertions import parse_assert
+from .correction import MAX_CORRECTIONS, RULES, CorrectionHistory, Finding, Plan, classify
+from .correction import plan as _plan
 
-POSITION_PT = {"above": "acima de", "below": "abaixo de", "left_of": "à esquerda de", "right_of": "à direita de",
-               "inside": "dentro de", "near": "perto de"}
-OPPOSITE_PT = {"above": "abaixo", "below": "acima", "left_of": "à direita", "right_of": "à esquerda"}
-MAX_CORRECTIONS = 12
+__all__ = ["Finding", "MAX_CORRECTIONS", "measure", "plan_round", "corrections", "next_scene", "next_scene_plan", "report"]
 
 
-@dataclass
-class Finding:
-    kind: str          # verify | layout | mirror
-    check: str
-    ok: bool
-    detail: str
-    source: str = ""   # assinatura | informada | imagem
+def _source(items) -> str:
+    srcs = {i.source for i in items}
+    return next(iter(srcs)) if len(srcs) == 1 else "mista"
 
 
 def measure(scene, image, boxes: dict | None = None) -> tuple[list[Finding], list[LC.Found]]:
@@ -45,97 +46,69 @@ def measure(scene, image, boxes: dict | None = None) -> tuple[list[Finding], lis
     items = [i for i in items if i.source != "assinatura" or LC.reliable(i.declared, i.measured)]
     measured = {i.id: i.measured for i in items}
     if items:
+        src = _source(items)
         verdict, detail = LC.mirror_verdict(items)
         if verdict != "incerto":
-            out.append(Finding("mirror", "espelhamento", verdict == "ok", f"{verdict} ({detail})",
-                               "informada" if all(i.source == "informada" for i in items) else "assinatura"))
+            out.append(Finding("mirror", "espelhamento", verdict == "ok", f"{verdict} ({detail})", src))
         res, _ = LC.recheck_asserts(scene, measured)
-        src = "informada" if all(i.source == "informada" for i in items) else "assinatura"
         for r in res:
             out.append(Finding("layout", r.raw, r.ok, r.detail, src))
     return out, items
 
 
-def _label(scene, ref: str) -> str:
-    e = scene.by_id.get(ref.split(".")[0])
-    return e.label if e else ref
-
-
-def _where(scene, ref: str) -> str:
-    e = scene.by_id.get(ref)
-    return P.entity_position(e, scene.grid_kind) if e else ""
+def plan_round(scene, findings: list[Finding], items: list[LC.Found], history: CorrectionHistory | None = None) -> Plan:
+    """Plano da rodada. Sem `history`, usa o que a própria cena já registra."""
+    return _plan(scene, findings, items, history or CorrectionHistory(scene.data.get("history")))
 
 
 def corrections(scene, findings: list[Finding], items: list[LC.Found]) -> list[str]:
-    """Uma frase afirmativa por falha. Fontes por cor (assinatura) viram frases mais cautelosas."""
-    out: list[str] = []
-    data = scene.data
-    for f in findings:
-        if f.ok:
-            continue
-        if f.kind == "mirror":
-            ents = sorted((i for i in items), key=lambda i: i.declared[0] + i.declared[2] / 2)
-            names = [f"{_label(scene, i.id)} {_where(scene, i.id)}" for i in ents[:3]]
-            out.append("A composição saiu espelhada na versão anterior; mantenha " + "; ".join(names)
-                       + " (esquerda e direita são as da imagem, de quem a vê).")
-        elif f.kind == "layout":
-            a = parse_assert(f.check)
-            if a.name in POSITION_PT and len(a.args) >= 2:
-                A, B = (x.split(".")[0] for x in a.args[:2])
-                txt = f"{P.cap(_label(scene, A))} fica {POSITION_PT[a.name]} {_label(scene, B)}"
-                if a.name in OPPOSITE_PT:
-                    txt += f" (antes ficou {OPPOSITE_PT[a.name]})"
-                where = _where(scene, A)
-                out.append(txt + (f"; posicione {_label(scene, A)} {where}." if where else "."))
-            elif a.name == "visible" and a.args:
-                out.append(f"{P.cap(_label(scene, a.args[0]))} aparece inteiro dentro do quadro, sem cortes nas bordas.")
-        elif f.kind == "verify":
-            name = f.check.split("(")[0]
-            if name == "max_colors":
-                n = f.check[f.check.index("(") + 1:-1]
-                out.append(f"Use no máximo {n} cores na imagem inteira, em áreas chapadas, sem gradiente nem suavização.")
-            elif name == "grid_aligned":
-                n = f.check[f.check.index("(") + 1:-1].split(",")[0]
-                out.append(f"Alinhe cada pixel a uma grade de {n} células de largura; todos os pixels do mesmo tamanho e quadrados, sem meio-pixel.")
-            elif name == "palette_match":
-                pal = (data.get("palette") or {}).get("colors") or {}
-                hexes = ", ".join(str(v) for v in pal.values() if isinstance(v, str))
-                out.append("Use somente as cores da paleta" + (f" ({hexes})" if hexes else "")
-                           + "; não acrescente tons fora dela.")
-    seen, uniq = set(), []
-    for t in out:
-        if t not in seen:
-            seen.add(t)
-            uniq.append(t)
-    return uniq[:MAX_CORRECTIONS]
+    """Uma frase afirmativa por falha com evidência suficiente (compatibilidade: devolve só os textos)."""
+    return plan_round(scene, findings, items).texts()
 
 
-def next_scene(scene, findings: list[Finding], items: list[LC.Found], image_name: str = "") -> tuple[dict, list[str]]:
-    """Cena da próxima rodada: correções, reforço de prioridade dos asserts reprovados e histórico."""
+def next_scene(scene, findings, items, image_name: str = "", keep_rounds: int | None = None) -> tuple[dict, list[str]]:
+    """Cena da próxima rodada: correções, reforço de prioridade dos asserts reprovados e histórico compactado."""
+    new, pl = next_scene_plan(scene, findings, items, image_name, keep_rounds)
+    return new, pl.texts()
+
+
+def next_scene_plan(scene, findings, items, image_name: str = "", keep_rounds: int | None = None) -> tuple[dict, Plan]:
     new = copy.deepcopy(scene.data)
-    corr = corrections(scene, findings, items)
+    hist = CorrectionHistory(new.get("history"))
+    pl = _plan(scene, findings, items, hist)
     asserts = new.get("asserts", [])
     boost = list(new.get("priority_boost", []))
-    failed_layout = [f.check for f in findings if f.kind == "layout" and not f.ok and f.check in asserts]
-    for raw in failed_layout:
+    for raw in [f.check for f in findings if f.kind == "layout" and not f.ok and f.check in asserts]:
         if raw not in boost:
             boost.append(raw)
     if boost:
         new["priority_boost"] = boost
-    new["corrections"] = corr
-    hist = list(new.get("history", []))
-    hist.append({"rodada": len(hist) + 1, "imagem": image_name, "reprovados": [f.check for f in findings if not f.ok],
-                 "tags": []})
-    new["history"] = hist
-    if not corr:
+    new["corrections"] = pl.texts()
+    if not new["corrections"]:
         new.pop("corrections")
-    return new, corr
+    hist.add(None, image_name, canon.short(canon.scene_hash(scene.data)), pl, [f.check for f in findings if not f.ok])
+    new["history"] = (hist.compact(keep_rounds) if keep_rounds else hist.compact()).to_list()
+    return new, pl
 
 
-def report(scene, findings: list[Finding], items: list[LC.Found], image_name: str = "") -> dict:
-    """Registro estruturado da rodada (dado de avaliação)."""
-    digest = hashlib.sha256(repr(sorted(scene.data.items(), key=lambda kv: kv[0])).encode("utf-8")).hexdigest()[:12]
-    return {"cena": scene.name, "hash_cena": digest, "rodada": len(scene.data.get("history", []) or []) + 1, "imagem": image_name,
-            "ok": all(f.ok for f in findings), "medicoes": [asdict(f) for f in findings],
+def _has_rule(name: str) -> bool:
+    return any(name in r.checks or (not r.checks and name == r.kind) for r in RULES)
+
+
+def report(scene, findings: list[Finding], items: list[LC.Found], image_name: str = "", pl: Plan | None = None) -> dict:
+    """Registro estruturado da rodada (dado de avaliação). `hash_cena` é o hash canônico (`canon-v1-sha256`) da cena semântica."""
+    hist = CorrectionHistory(scene.data.get("history"))
+    pl = pl or _plan(scene, findings, items, hist)
+    full = canon.scene_hash(scene.data)
+    names = {f.check.split("(")[0] for f in findings if f.kind != "mirror"}
+    return {"cena": scene.name, "hash_cena": canon.short(full), "hash_cena_completo": full, "hash_algoritmo": canon.ALGORITHM,
+            "rodada": hist.next_round, "imagem": image_name,
+            "ok": all(f.ok for f in findings),
+            "medicoes": [{**asdict(f), "classe": classify(f)} for f in findings],
             "entidades": [{"id": i.id, "declarada": list(i.declared), "medida": list(i.measured), "fonte": i.source,
-                           "iou": round(LC.iou(i.declared, i.measured), 3)} for i in items]}
+                           "iou": round(LC.iou(i.declared, i.measured), 3)} for i in items],
+            "correcoes": [asdict(c) | {"chave": c.key} for c in pl.applied],
+            "adiadas": [asdict(s) for s in pl.deferred],
+            "nao_resolvidas": [asdict(s) for s in pl.unresolved],
+            "cobertura": {"medidos_sem_regra": sorted(n for n in names if not _has_rule(n))},
+            "historico_rodadas": hist.next_round - 1}

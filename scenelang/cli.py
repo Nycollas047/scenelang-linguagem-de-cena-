@@ -286,10 +286,11 @@ def cmd_correct(a) -> int:
         return 2
     for f in findings:
         print(f"{'✓' if f.ok else '✗'} [{f.kind}] {f.check:<34} {f.detail}" + (f"  ({f.source})" if f.source and f.kind != "verify" else ""))
-    new, corr = CR.next_scene(scene, findings, items, Path(a.image).name)
+    new, pl = CR.next_scene_plan(scene, findings, items, Path(a.image).name, a.keep_rounds)
+    corr = pl.texts()
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    (out / "relatorio.json").write_text(json.dumps(CR.report(scene, findings, items, Path(a.image).name, pl), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     from .evalform import dump_scene
 
     new_text = dump_scene(new)
@@ -300,6 +301,10 @@ def cmd_correct(a) -> int:
         return 1
     (out / "cena.next.yaml").write_text(new_text, encoding="utf-8")
     (out / "prompt_next.txt").write_text(to_prose(ok_scene), encoding="utf-8")
+    for sk in pl.deferred:
+        print(f"· adiada   {sk.failure}: {sk.reason}", file=sys.stderr)
+    for sk in pl.unresolved:
+        print(f"· NÃO RESOLVIDA {sk.failure}: {sk.reason}" + (f" → {sk.suggestion}" if sk.suggestion else ""), file=sys.stderr)
     ok = all(f.ok for f in findings)
     print(f"\n{sum(f.ok for f in findings)}/{len(findings)} medições cumpridas; {len(corr)} correção(ões) para a próxima rodada.")
     print(f"gravado em {out}: relatorio.json, cena.next.yaml, prompt_next.txt")
@@ -500,6 +505,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("scene"); s.add_argument("image")
     s.add_argument("--boxes", help="JSON {id: [x,y,w,h]} de quem olhou a imagem")
     s.add_argument("--out-dir", default="rodada")
+    s.add_argument("--keep-rounds", type=int, default=None, help="rodadas detalhadas no histórico (padrão 6); as mais antigas viram um resumo")
     s.set_defaults(fn=cmd_correct)
 
     s = sub.add_parser("pack", help="junta prompt, guia de composição e cena em um formato que o modelo de destino aceita")
