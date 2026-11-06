@@ -88,7 +88,8 @@ def loss_report(text: str, target: str = "prose") -> dict:
     if err:
         return err
     items = LS.report(scene, target)
-    return {"ok": True, "target": target, "items": [str(i) for i in items], "blocking": bool(LS.blocking(items))}
+    return {"ok": True, "target": target, "items": [str(i) for i in items if i.level not in ("preserved", "meta")],
+            "fidelity": LS.fidelity(items), "summary": LS.summary(items), "blocking": bool(LS.blocking(items))}
 
 
 def check_layout(text: str) -> dict:

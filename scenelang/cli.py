@@ -102,8 +102,10 @@ def cmd_compile(a) -> int:
         from . import loss as LS
 
         items = LS.report(scene, a.target)
-        for it in items:
-            print(it, file=sys.stderr)
+        for it in sorted(items, key=lambda x: LS.LEVELS.index(x.level)):
+            if it.level not in ("preserved", "meta") or a.loss == "all":
+                print(it, file=sys.stderr)
+        print(f"fidelidade ao compilar para {a.target}: {LS.fidelity(items)} ({', '.join(f'{n} {k}' for k, n in LS.summary(items).items())})", file=sys.stderr)
         if a.strict and LS.blocking(items):
             print("modo estrito: há perdas ou falta de asserts; nada foi compilado", file=sys.stderr)
             return 3
@@ -496,7 +498,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("scene"); s.add_argument("--target", choices=sorted(BACKENDS), default="prose")
     s.add_argument("--size", help="tamanho em px para o backend regions, ex.: 1344x756")
     s.add_argument("--pass", dest="passname", choices=["black", "white"], help="passada do alpha: difference")
-    s.add_argument("--loss", action="store_true", help="lista o que a cena declara e o backend não leva ao gerador")
+    s.add_argument("--loss", nargs="?", const="lost", choices=["lost", "all"], default=False,
+                   help="lista o que a cena declara e o backend não leva (ou leva só aproximado) ao gerador; `--loss all` inclui também o que chega intacto")
     s.add_argument("--strict", action="store_true", help="falha (código 3) se houver perda real ou a cena não tiver asserts")
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
 
