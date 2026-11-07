@@ -19,6 +19,7 @@ Você descreve a cena em YAML; as ferramentas validam, compilam em prompt e mede
 | 6 | `scenelang_compile` | Prompt final (`prose`, `json`, `regions`) + o que o backend perde |
 | 7 | `scenelang_pack` | Grava `prompt.txt`, `guia.png`, `cena_unica.png` |
 | 8 | `scenelang_locate` / `scenelang_verify` / `scenelang_measure` | Mede a imagem gerada e prepara a próxima rodada |
+| 9 | `scenelang_diff` / `scenelang_patch` / `scenelang_delta_prompt` | Altera só uma parte da cena; prompt de edição com o que mudou |
 
 Sem o servidor MCP, use a CLI equivalente: `scenelang validate|compile|pack|locate|verify|correct`.
 
@@ -47,7 +48,10 @@ Sem o servidor MCP, use a CLI equivalente: `scenelang validate|compile|pack|loca
 
 ## Regras de ouro
 
-- Medir por cor (`signature`) é frágil: o gerador troca cores. Prefira caixas informadas por você olhando a imagem; relate por qual método cada medida foi feita.
+- Medir por cor (`signature`) é frágil: o gerador troca cores. Prefira caixas informadas por você olhando a imagem (`null` se o item não aparece); relate por qual método cada medida foi feita.
+- Cada entidade medida tem um estado (`localizada`, `parcial`, `ambigua`, `evidencia_insuficiente`, `nao_localizada`). Só `localizada` conta; cor que não aparece NÃO prova que o item sumiu.
+- Falhas medidas só por cor ficam «adiadas»: o prompt não é alterado por elas. Falhas «não resolvidas» (instrução esgotada ou sem regra) vão ao usuário com a sugestão de pós-processamento, não viram instrução genérica.
+- Se `scenelang_compile` disser fidelidade «parcial» ou «sem garantia», diga ao usuário o que falta (a lista de perdas), não prometa o resultado.
 - Geradores ignoram grade de pixels e paleta fixa. Verificações `grid_aligned`/`palette_match` reprovam com frequência; `scenelang snap` pós-processa para pixel art estrita.
 - Espelhamento é variação do gerador, não erro da cena: reporte, não "corrija" a cena.
 - Elementos extras que o gerador acrescenta: declare-os na cena se quiser mantê-los, ou diga que são indesejados.

@@ -1,4 +1,3 @@
-import json
 import shutil
 
 import pytest
@@ -128,7 +127,6 @@ def test_texto_do_painel_nao_e_cortado_e_a_proporcao_e_avisada(tmp_path):
     assert Image.open(tmp_path / "cena_unica.png").size == (W, H)
     assert any("proporção" in w for w in res["warnings"]) == (max(W, H) / min(W, H) > PK.DIM_LIMITS["max_aspect"])
     # quebra por largura medida: nenhuma linha passa da largura útil
-    from PIL import ImageFont
     f = PK._font(15)
     for ln in PK._wrap("palavra " * 300 + "x" * 400, f, W - 48):
         assert f.getlength(ln) <= W - 48 + 1

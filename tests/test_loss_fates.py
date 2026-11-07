@@ -1,4 +1,3 @@
-import pytest
 import yaml
 
 from scenelang import loss as LS
