@@ -246,6 +246,46 @@ def cmd_locate(a) -> int:
     return 1 if bad else 0
 
 
+def cmd_diff(a) -> int:
+    from . import api
+
+    res = api.diff_scenes(Path(a.old).read_text(encoding="utf-8"), Path(a.new).read_text(encoding="utf-8"))
+    if not res.get("ok"):
+        print(json.dumps(res, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 1
+    print(json.dumps(res, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_patch(a) -> int:
+    from . import api
+
+    ops = json.loads(Path(a.ops).read_text(encoding="utf-8"))
+    res = api.patch_scene(Path(a.scene).read_text(encoding="utf-8"), ops)
+    if "text" not in res:
+        print(json.dumps(res, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 1
+    for d in res["errors"]:
+        print(f"erro: {d}", file=sys.stderr)
+    (Path(a.out).write_text(res["text"], encoding="utf-8") if a.out else sys.stdout.write(res["text"]))
+    return 0 if res["ok"] else 1
+
+
+def cmd_delta_prompt(a) -> int:
+    from . import api
+
+    res = api.delta_prompt(Path(a.old).read_text(encoding="utf-8"), Path(a.new).read_text(encoding="utf-8"))
+    if not res.get("ok"):
+        print(json.dumps(res, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 1
+    if res["unchanged"]:
+        print("nada mudou: não há o que editar", file=sys.stderr)
+        return 0
+    sys.stdout.write(res["prompt"])
+    print(f"({res['chars']} caracteres contra {res['full_chars']} do prompt completo; exige {res['requires']})", file=sys.stderr)
+    return 0
+
+
 def cmd_pose(a) -> int:
     from . import skeleton
 
@@ -518,6 +558,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--strict", action="store_true", help="falha (código 3) se houver perda real ou a cena não tiver asserts")
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
 
+    s = sub.add_parser("diff", help="o que mudou entre duas cenas: patch mínimo e o que precisa ser reavaliado")
+    s.add_argument("old"); s.add_argument("new"); s.set_defaults(fn=cmd_diff)
+    s = sub.add_parser("patch", help="aplica um patch JSON (set/remove/add/append/reorder) e valida a cena nova")
+    s.add_argument("scene"); s.add_argument("ops", help="arquivo JSON com a lista de operações"); s.add_argument("--out"); s.set_defaults(fn=cmd_patch)
+    s = sub.add_parser("delta-prompt", help="prompt de EDIÇÃO só com o que mudou (precisa da imagem anterior como entrada)")
+    s.add_argument("old"); s.add_argument("new"); s.set_defaults(fn=cmd_delta_prompt)
     s = sub.add_parser("pose", help="folha de construção da pose (caixas, cilindros, esferas) em 3 vistas")
     s.add_argument("scene"); s.add_argument("entity"); s.add_argument("--out", help="arquivo de saída (obrigatório, exceto com --export)")
     s.add_argument("--style", choices=["mannequin", "construction"], default="mannequin",

@@ -174,3 +174,13 @@ def test_perna_dobrada_de_lado_aponta_para_frente_em_perfil():
     # personagem de perfil olhando para a direita da imagem (+x): coxa à frente = +x
     v = _d({"body_yaw": 90, "joints": {"right_hip": {"flex": 80}}}, "right_hip", "right_knee")
     assert v[0] > 0.1
+
+
+def test_juntas_simetricas_viram_uma_frase_so_sem_perder_informacao():
+    _, s = run("{body_yaw: 0, joints: {right_knee: 100, left_knee: 100, right_hip: 85, left_hip: 85, right_elbow: 70, left_elbow: 65}}")
+    t = PO.sentence(s, "h")
+    assert "os joelhos dobrados 100°" in t and "os quadris dobrados para a frente 85°" in t
+    assert "joelho direito" not in t and "joelho esquerdo" not in t
+    assert "cotovelo direito dobrado 70°" in t and "cotovelo esquerdo dobrado 65°" in t      # valores diferentes: cada um com a sua frase
+    _, s2 = run("{body_yaw: 0, joints: {right_knee: 100, left_knee: 90}}")
+    assert "joelho direito" in PO.sentence(s2, "h") and "joelho esquerdo" in PO.sentence(s2, "h")

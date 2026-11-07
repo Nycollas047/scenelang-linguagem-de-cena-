@@ -37,6 +37,8 @@ PRIMARY = AN.PRIMARY
 JOINT_PT = {"neck": "o pescoço", "spine": "a coluna", "shoulder": "o ombro", "elbow": "o cotovelo", "wrist": "o punho",
             "hip": "o quadril", "knee": "o joelho", "ankle": "o tornozelo"}
 SIDE_PT = {"left": "esquerdo", "right": "direito"}
+JOINT_PL = {"shoulder": "os ombros", "elbow": "os cotovelos", "wrist": "os punhos", "hip": "os quadris", "knee": "os joelhos", "ankle": "os tornozelos"}
+_PLURAL = (("dobrado", "dobrados"), ("estendido", "estendidos"), ("afastado", "afastados"), ("girado", "girados"))
 # (junta, eixo) -> (frase quando positivo, frase quando negativo)
 AXIS_PT = {
     "flex": ("dobrado para a frente", "estendido para trás"),
@@ -209,6 +211,10 @@ def _coherence(c, p: str, po: dict, joints: dict) -> None:
         c.warn(f"{p}.joints.spine", "tronco muito inclinado com braço quase vertical: pose de equilíbrio difícil, o modelo pode errar")
 
 
+def _clean(axes) -> dict:
+    return {k: v for k, v in (axes or {}).items() if v}
+
+
 def _heuristics(c, p: str, joints: dict) -> None:
     """Pose dentro das faixas, mas anatomicamente duvidosa. Avisos (nunca erros): são heurísticas, não um diagnóstico —
     estar dentro dos limites numéricos de cada junta não garante que o corpo faça aquilo."""
@@ -273,12 +279,29 @@ def sentence(scene, entity_id: str) -> str | None:
         hy = head_yaw(po)
         if hy is not None and _deg(po.get("joints") or {}, "neck", "turn"):
             out.append("rosto " + _yaw_phrase(hy).replace("corpo ", "", 1).replace("em três quartos", "em três quartos").strip())
-    for name, val in (po.get("joints") or {}).items():
+    joints = po.get("joints") or {}
+    done: set[str] = set()
+    for name, val in joints.items():
+        if name in done:
+            continue
         axes = normalize_joint(val, name) if name in JOINTS else None
-        if axes:
+        if not axes:
+            continue
+        side, base = split(name)
+        other = f"{'left' if side == 'right' else 'right'}_{base}" if side else None
+        if other and other in joints and _clean(normalize_joint(joints[other], other)) == _clean(axes) and _clean(axes):
+            done.add(other)           # os dois lados iguais: uma frase só (menos tokens, mesma informação)
             ph = _joint_phrase(name, axes, limits)
             if ph:
+                label = JOINT_PT[base] + f" {SIDE_PT[side]}"
+                ph = ph.replace(label, JOINT_PL[base], 1)
+                for a, b in _PLURAL:
+                    ph = ph.replace(a, b)
                 out.append(ph)
+            continue
+        ph = _joint_phrase(name, axes, limits)
+        if ph:
+            out.append(ph)
     for k, v in (po.get("hold") or {}).items():
         if k in HAND_FOOT:
             out.append(f"{HAND_FOOT[k]} segura/toca {v}")

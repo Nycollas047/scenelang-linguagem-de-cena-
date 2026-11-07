@@ -305,3 +305,34 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
 
 
 BACKENDS = {"prose": to_prose, "json": to_json, "regions": to_regions}
+
+
+def delta_prompt(old: Scene, new: Scene) -> str:
+    """Prompt de EDIÇÃO: só o que mudou da cena anterior para a nova, para quem aceita continuar de uma imagem existente.
+
+    Precisa da imagem anterior como entrada; sem ela, use o prompt completo. Entidades iguais entram só como «mantenha»;
+    entidades novas ou alteradas entram com a frase inteira; seções globais alteradas entram com o texto novo. Devolve ""
+    quando nada mudou. Cenas com `lock` já têm «manter igual» próprio, que segue valendo.
+    """
+    from . import deps
+
+    dl = deps.delta(old.data, new.data)
+    if dl.empty:
+        return ""
+    lines: list[str] = []
+    ir_old, ir_new = build_ir(old), build_ir(new)
+    keep = [new.by_id[i].label for i in dl.unchanged if i in new.by_id]
+    if keep:
+        lines.append("Mantenha exatamente igual à imagem anterior, sem alterar posição, forma nem cor: " + "; ".join(keep) + ".")
+    if dl.removed:
+        lines.append("Remova: " + "; ".join(old.by_id[i].label for i in dl.removed if i in old.by_id) + ".")
+    for i in dl.changed + dl.added:
+        e = new.by_id[i]
+        lines.append(("Altere" if i in dl.changed else "Acrescente") + f" {e.label}: " + entity_sentence(new, e))
+    if dl.reordered:
+        lines.append("A ordem de sobreposição dos elementos mudou: " + "; ".join(new.by_id[i].label for i in [e.id for e in new.entities]) + ".")
+    skip = {"planos", "prioridades", "manter_igual"}
+    for k, v in ir_new.items():
+        if k not in skip and ir_old.get(k) != v:
+            lines.append((" ".join(v) if isinstance(v, list) else str(v)))
+    return "\n".join(lines) + "\n"

@@ -39,8 +39,27 @@ class Measurement:
     skipped_asserts: list  # asserts de posição que não puderam ser avaliados (faltou medição confiável de alguma entidade)
 
 
-def measure_full(scene, image, boxes: dict | None = None) -> Measurement:
-    """Roda todas as medições possíveis. `boxes` são caixas {id: [x,y,w,h]} de quem olhou a imagem (null = não aparece)."""
+def _measure_key(scene, image, boxes) -> str:
+    import hashlib
+
+    from . import cache as CA
+
+    ih = hashlib.sha256(image.tobytes()).hexdigest()
+    # a medição depende da imagem, das caixas informadas e da cena, menos o que nunca a influencia
+    data = {k: v for k, v in scene.data.items() if k not in ("history", "corrections", "priority_boost")}
+    return CA.key_of(ih, image.size, image.mode, boxes or {}, data)
+
+
+def measure_full(scene, image, boxes: dict | None = None, use_cache: bool = True) -> Measurement:
+    """Roda todas as medições possíveis. `boxes` são caixas {id: [x,y,w,h]} de quem olhou a imagem (null = não aparece).
+
+    Com `use_cache`, a mesma imagem medida de novo contra uma cena equivalente (histórico e correções não contam) devolve o
+    resultado guardado — a medição por cor é o passo caro (~1,5 s numa imagem de 1,5 MP). O resultado é compartilhado:
+    não o modifique."""
+    if use_cache:
+        from . import cache as CA
+
+        return CA.DEFAULT.memo("measure", _measure_key(scene, image, boxes), lambda: measure_full(scene, image, boxes, use_cache=False))
     out: list[Finding] = []
     for r in ver.run(scene, image):
         out.append(Finding("verify", r.raw, r.ok, r.detail, "imagem"))

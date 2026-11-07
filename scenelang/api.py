@@ -76,7 +76,9 @@ def new(template: str) -> str:
 # --- ferramentas com arquivos/imagens (usadas pelo servidor MCP) -------------------------------------------------
 
 def _scene(text: str):
-    diags, scene, _ = load_text(text)
+    from .cache import load_cached
+
+    diags, scene, _ = load_cached(text)
     errs = [d.to_dict() for d in diags if d.level == "error"]
     return scene, ({"ok": False, "errors": errs} if scene is None else None)
 
@@ -212,3 +214,41 @@ def verify_image(text: str, image_path: str) -> dict:
         return err
     res = ver.run(scene, Image.open(image_path))
     return {"ok": all(r.ok for r in res), "results": [{"verify": r.raw, "ok": r.ok, "detail": r.detail, "score": r.score} for r in res]}
+
+
+def diff_scenes(old_text: str, new_text: str) -> dict:
+    """O que mudou entre duas cenas: patch mínimo + entidades/seções/asserts/verificadores afetados."""
+    from . import deps, patch
+
+    (o, eo), (n, en) = _scene(old_text), _scene(new_text)
+    if eo or en:
+        return eo or en
+    dl = deps.delta(o.data, n.data)
+    return {"ok": True, "empty": dl.empty, "patch": patch.diff(o.data, n.data), "changed": dl.changed, "added": dl.added, "removed": dl.removed,
+            "unchanged": dl.unchanged, "sections": dl.sections, "impacted_asserts": dl.impacted_asserts, "impacted_verify": dl.impacted_verify}
+
+
+def patch_scene(text: str, ops: list[dict]) -> dict:
+    """Aplica um patch (ver scenelang.patch) e devolve a cena nova já validada."""
+    from . import patch
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    try:
+        new = patch.apply_patch(scene.data, ops)
+    except patch.PatchError as e:
+        return {"ok": False, "errors": [{"message": str(e)}]}
+    out = yaml.safe_dump(new, allow_unicode=True, sort_keys=False)
+    diags, sc2, _ = load_text(out)
+    return {"text": out, **_result(diags, sc2, [])}
+
+
+def delta_prompt(old_text: str, new_text: str) -> dict:
+    """Prompt de edição (só o que mudou). Exige a imagem anterior como entrada do gerador; sem ela, use o prompt completo."""
+    (o, eo), (n, en) = _scene(old_text), _scene(new_text)
+    if eo or en:
+        return eo or en
+    p = CP.delta_prompt(o, n)
+    full = CP.to_prose(n)
+    return {"ok": True, "unchanged": not p, "prompt": p, "chars": len(p), "full_chars": len(full), "requires": "imagem anterior como entrada do gerador"}

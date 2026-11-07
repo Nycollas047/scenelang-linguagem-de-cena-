@@ -103,6 +103,29 @@ def build():
         """Roda os `verify` da cena (paleta, grade de pixels, nº de cores, fundo, etc.) sobre a imagem gerada."""
         return _j(api.verify_image(scene_yaml, image_path))
 
+    @mcp.tool()
+    def scenelang_diff(old_scene_yaml: str, new_scene_yaml: str) -> str:
+        """O que mudou entre duas versões da cena: patch mínimo, entidades alteradas e quais asserts/verificadores precisam ser reavaliados."""
+        return _j(api.diff_scenes(old_scene_yaml, new_scene_yaml))
+
+    @mcp.tool()
+    def scenelang_patch(scene_yaml: str, ops_json: str) -> str:
+        """Altera só uma parte da cena. ops_json: lista de operações, ex. [{"op":"set","path":"entities.sapo.box","value":[0.3,0.4,0.3,0.4]}]
+        (op: set | remove | add | append | reorder; entidades pelo id). Devolve a cena nova validada."""
+        return _j(api.patch_scene(scene_yaml, json.loads(ops_json)))
+
+    @mcp.tool()
+    def scenelang_delta_prompt(old_scene_yaml: str, new_scene_yaml: str) -> str:
+        """Prompt de EDIÇÃO com só o que mudou (menos tokens). Use apenas se o gerador aceitar a imagem anterior como entrada."""
+        return _j(api.delta_prompt(old_scene_yaml, new_scene_yaml))
+
+    @mcp.tool()
+    def scenelang_cache_stats() -> str:
+        """Acertos e falhas do cache (leitura da cena, medição de imagens)."""
+        from . import cache
+
+        return _j(cache.DEFAULT.stats())
+
     return mcp
 
 
