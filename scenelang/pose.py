@@ -52,6 +52,9 @@ AXIS_PT = {
 # Dobradiças: só têm um sentido, então a frase muda.
 HINGE_PT = {"elbow": "dobrado", "knee": "dobrado"}
 HAND_FOOT = {"left_hand": "a mão esquerda", "right_hand": "a mão direita", "left_foot": "o pé esquerdo", "right_foot": "o pé direito"}
+POSE_HEADER = ("Pose (ângulos em graus a partir da posição neutra, esquerda e direita do próprio personagem; "
+               "mantenha a anatomia natural): ")
+POSE_HEADER_SHORT = "Pose (graus, neutro 0°, lados do personagem): "
 POSE_KEYS = {"body_yaw", "joints", "hold", "profile"}
 
 
@@ -307,5 +310,4 @@ def sentence(scene, entity_id: str) -> str | None:
             out.append(f"{HAND_FOOT[k]} segura/toca {v}")
     if not out:
         return None
-    return ("Pose (ângulos em graus a partir da posição neutra, esquerda e direita do próprio personagem; "
-            "mantenha a anatomia natural): " + "; ".join(out) + ".")
+    return POSE_HEADER + "; ".join(out) + "."

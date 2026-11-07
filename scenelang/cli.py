@@ -246,6 +246,32 @@ def cmd_locate(a) -> int:
     return 1 if bad else 0
 
 
+def cmd_bench(a) -> int:
+    from . import bench as BN
+
+    out = Path(a.out_dir)
+    if a.action == "plan":
+        base = Path(a.baseline).read_text(encoding="utf-8") if a.baseline else None
+        prev = Path(a.previous).read_text(encoding="utf-8") if a.previous else None
+        doc = BN.plan(Path(a.scene).read_text(encoding="utf-8"), out, base, prev)
+        for m, r in doc["modos"].items():
+            print(f"{m:<13}", "indisponível: " + r["motivo"] if not r["disponivel"] else f"{r['entrada_tokens']} tokens ({r['entrada_method']}), {r['caracteres']} caracteres")
+        print(f"gravado em {out}/ (plano.json, prompt_*.txt, execucoes.jsonl)")
+        return 0
+    if a.action == "record":
+        rec = BN.record(out, a.mode, a.run_id, Path(a.scene).read_text(encoding="utf-8") if a.scene else None, a.image,
+                        json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None, a.tokens_out, a.calls, a.attempts, a.cost_usd,
+                        a.latency_s, a.corrections, a.notes)
+        print(json.dumps(rec, ensure_ascii=False, indent=2))
+        return 0
+    rep = BN.report(out, a.price_in, a.price_out)
+    (out / "relatorio.json").write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
+    md = BN.markdown(rep)
+    (out / "relatorio.md").write_text(md, encoding="utf-8")
+    sys.stdout.write(md)
+    return 0
+
+
 def cmd_diff(a) -> int:
     from . import api
 
@@ -558,6 +584,17 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--strict", action="store_true", help="falha (código 3) se houver perda real ou a cena não tiver asserts")
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
 
+    s = sub.add_parser("bench", help="estrutura de benchmark SceneLang × prompt convencional (não chama gerador algum)")
+    s.add_argument("action", choices=["plan", "record", "report"])
+    s.add_argument("out_dir", help="pasta do benchmark")
+    s.add_argument("--scene"); s.add_argument("--baseline", help="plan: prompt convencional escrito à mão (txt)")
+    s.add_argument("--previous", help="plan: cena da rodada anterior (habilita o modo incremental)")
+    s.add_argument("--mode", choices=["convencional", "completa", "compacta", "incremental", "com_guia"]); s.add_argument("--run-id", default="1")
+    s.add_argument("--image"); s.add_argument("--boxes", help="record: JSON {id: [x,y,w,h]} de quem olhou a imagem")
+    s.add_argument("--tokens-out", type=int); s.add_argument("--calls", type=int); s.add_argument("--attempts", type=int)
+    s.add_argument("--cost-usd", type=float); s.add_argument("--latency-s", type=float); s.add_argument("--corrections", type=int); s.add_argument("--notes", default="")
+    s.add_argument("--price-in", type=float, help="report: USD por 1M tokens de entrada"); s.add_argument("--price-out", type=float, help="report: USD por 1M tokens de saída")
+    s.set_defaults(fn=cmd_bench)
     s = sub.add_parser("diff", help="o que mudou entre duas cenas: patch mínimo e o que precisa ser reavaliado")
     s.add_argument("old"); s.add_argument("new"); s.set_defaults(fn=cmd_diff)
     s = sub.add_parser("patch", help="aplica um patch JSON (set/remove/add/append/reorder) e valida a cena nova")

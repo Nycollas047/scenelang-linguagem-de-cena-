@@ -304,7 +304,29 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
     return json.dumps(out, ensure_ascii=False, indent=2) + "\n"
 
 
-BACKENDS = {"prose": to_prose, "json": to_json, "regions": to_regions}
+def to_compact(scene: Scene, passname: str | None = None) -> str:
+    """Mesmo conteúdo da prosa, sem cabeçalhos, sem numeração e sem o que a prosa repete: menos tokens, com perdas DECLARADAS.
+
+    Fora dela: o bloco PRIORIDADES (as frases dos asserts: a posição de cada entidade segue na própria frase da entidade),
+    a ORDEM DO OLHAR e o LEMBRETE FINAL. `scenelang compile --target compact --loss` lista o que isso custa.
+    """
+    from . import pose as PO
+
+    ir = build_ir(scene, passname)
+    parts = [ir["estilo"], ir["quadro"], ir["grade"]]
+    for key in ("intencao", "atmosfera"):
+        if key in ir:
+            parts.append(ir[key])
+    for plane, sentences in ir["planos"].items():
+        parts.append(f"[{plane}] " + " ".join(sentences))
+    for key in ("iluminacao", "camera", "detalhe_de_textura", "paleta", "detalhes", "fundo", "acabamento", "manter_igual", "correcoes"):
+        if key in ir:
+            v = ir[key]
+            parts.append(" ".join(v) if isinstance(v, list) else v)
+    return " ".join(parts).replace(PO.POSE_HEADER, PO.POSE_HEADER_SHORT) + "\n"
+
+
+BACKENDS = {"prose": to_prose, "json": to_json, "regions": to_regions, "compact": to_compact}
 
 
 def delta_prompt(old: Scene, new: Scene) -> str:

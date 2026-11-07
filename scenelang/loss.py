@@ -28,6 +28,7 @@ LEVELS = ("lost", "unsupported", "approx", "external", "unchecked", "preserved",
 # uma entrada ("regions", chave) tem prioridade. Toda chave aceita pelo validador PRECISA estar aqui (há teste), para uma
 # chave nova nunca ficar sem destino declarado.
 _ALL = "*"
+ALIAS = {"compact": "prose"}      # um backend sem regra própria para a chave herda a do backend de origem
 FATE: dict[tuple[str, str], tuple[str, str]] = {}
 
 
@@ -55,6 +56,11 @@ _fate("approx", "a posição vira palavra de região; tamanho e posição exata 
 _fate("approx", "a posição vira palavra de região; tamanho e posição exata não chegam", "entities.at", "entities.size", "entities.box", backend="json")
 _fate("preserved", "a caixa vai em box_norm e box_px para quem consome regiões", "entities.at", "entities.size", "entities.box", backend="regions")
 _fate("approx", "graus viram frase (ex.: «cotovelo dobrado a 90°»); o gerador não mede ângulo", "entities.pose")
+
+
+# o destino `compact` descarta de propósito estes blocos da prosa
+_fate("lost", "a ordem do olhar não vai no destino compact", "gaze", backend="compact")
+_fate("approx", "o reforço em frases dos asserts não vai; a posição segue só na frase de cada entidade", "asserts", backend="compact")
 
 
 @dataclass
@@ -103,7 +109,7 @@ def _fates(d: dict, backend: str) -> list[Loss]:
     def look(key: str, path: str, present: bool):
         if not present:
             return
-        level, note = FATE.get((backend, key)) or FATE.get((_ALL, key)) or ("unsupported", "chave sem destino declarado neste backend: não chega ao gerador")
+        level, note = FATE.get((backend, key)) or FATE.get((ALIAS.get(backend), key)) or FATE.get((_ALL, key)) or ("unsupported", "chave sem destino declarado neste backend: não chega ao gerador")
         out.append(Loss(level, path, note))
 
     for k in d:

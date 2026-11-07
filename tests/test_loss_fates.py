@@ -80,3 +80,19 @@ def test_fidelidade_completa_so_quando_nada_se_perde_nem_depende_de_fora():
 def test_summary_conta_por_nivel():
     s = LS.summary(LS.report(sc(), "prose"))
     assert s["preserved"] >= 5 and s["approx"] >= 1 and s["external"] >= 3
+
+
+def test_nenhum_backend_deixa_chave_conhecida_sem_destino():
+    from scenelang.compile import BACKENDS
+    s = sc()
+    for b in BACKENDS:
+        items = LS.report(s, b)
+        assert not [i for i in items if i.level == "unsupported"], (b, [str(i) for i in items if i.level == "unsupported"])
+
+
+def test_compact_declara_o_que_corta():
+    t = BASE + "gaze: [a]\nasserts: [\"visible(a)\"]\n"
+    lv = {i.path: i.level for i in LS.report(sc(t), "compact")}
+    assert lv["$.gaze"] == "lost" and lv["$.asserts"] == "approx"
+    assert LS.fidelity(LS.report(sc(t), "compact")) == "sem garantia" and LS.blocking(LS.report(sc(t), "compact"))
+    assert {i.path: i.level for i in LS.report(sc(t), "prose")}["$.gaze"] == "preserved"
