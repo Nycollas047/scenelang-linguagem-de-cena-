@@ -16,7 +16,7 @@ UPPER_ARM, FOREARM, THIGH, SHIN = 0.17, 0.15, 0.245, 0.235
 RIGHT_COL, LEFT_COL, CORE_COL = "#c2410c", "#1d4ed8", "#1f2937"
 
 
-def _rx(v, a):   # gira em torno de x: para baixo → para a frente (+z) quando a > 0
+def _rx(v, a):   # gira em torno de x: um vetor que aponta para cima vai para +z (frente) quando a > 0; um que aponta para baixo vai para -z
     c, s = math.cos(a), math.sin(a)
     return (v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c)
 
@@ -48,32 +48,32 @@ def points(pose: dict) -> dict[str, tuple[float, float, float]]:
     spine_flex, spine_side, spine_twist = _g(joints, "spine", "flex"), _g(joints, "spine", "side"), _g(joints, "spine", "twist")
 
     def torso(v):   # inclina o tronco; "direita do personagem" é -x na vista de frente
-        return _rz(_rx(v, spine_flex), -spine_side)
+        return _rz(_rx(v, spine_flex), spine_side)
 
     neck_base = torso((0, TORSO, 0))
     pts["neck"] = neck_base
     head_dir = _rx((0, 1, 0), _g(joints, "neck", "flex"))
-    head_dir = _rz(head_dir, -_g(joints, "neck", "tilt"))
+    head_dir = _rz(head_dir, _g(joints, "neck", "tilt"))
     pts["head"] = _add(neck_base, head_dir, NECK + HEAD_R)
     face = _ry((0, 0, 1), -_g(joints, "neck", "turn"))   # turn positivo = direita do personagem = -x de frente
     pts["nose"] = _add(pts["head"], face, HEAD_R * 1.3)
     for side, sgn in (("right", -1), ("left", 1)):
-        sh = _ry((sgn * SHOULDER, 0, 0), spine_twist * sgn)
+        sh = _ry((sgn * SHOULDER, 0, 0), -spine_twist)   # os dois ombros giram o mesmo ângulo: torção p/ a direita leva o esquerdo à frente
         sh = _add(neck_base, sh)
         pts[f"{side}_shoulder"] = sh
         flex, ab, rot = (_g(joints, f"{side}_shoulder", a) for a in ("flex", "abduct", "rotate"))
-        up = _rz(_rx((0, -1, 0), flex), -sgn * ab)
+        up = _rz(_rx((0, -1, 0), -flex), sgn * ab)      # braço pendente: flex + o leva para a frente (+z); abduct + o afasta do corpo
         pts[f"{side}_elbow"] = _add(sh, up, UPPER_ARM)
         e = _g(joints, f"{side}_elbow", "flex")
-        fore = _rz(_rx((0, -1, 0), flex + e), -sgn * ab)
+        fore = _rz(_rx((0, -1, 0), -(flex + e)), sgn * ab)
         pts[f"{side}_wrist"] = _add(pts[f"{side}_elbow"], fore, FOREARM)
         hp = (sgn * HIP, 0.0, 0.0)
         pts[f"{side}_hip"] = hp
         hf, hab = _g(joints, f"{side}_hip", "flex"), _g(joints, f"{side}_hip", "abduct")
-        th = _rz(_rx((0, -1, 0), hf), -sgn * hab)
+        th = _rz(_rx((0, -1, 0), -hf), sgn * hab)
         pts[f"{side}_knee"] = _add(hp, th, THIGH)
         kf = _g(joints, f"{side}_knee", "flex")
-        sn = _rz(_rx((0, -1, 0), hf - kf), -sgn * hab)
+        sn = _rz(_rx((0, -1, 0), -(hf - kf)), sgn * hab)
         pts[f"{side}_ankle"] = _add(pts[f"{side}_knee"], sn, SHIN)
     # câmera: quadril na origem; gira o corpo todo em torno de y
     return {k: _ry(v, yaw) for k, v in pts.items()}

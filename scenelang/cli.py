@@ -256,6 +256,21 @@ def cmd_pose(a) -> int:
         return 2
     from . import render as R
 
+    if a.export:
+        from . import rig as RG
+
+        try:
+            res = RG.to_rig(raw["pose"], a.export, json.loads(Path(a.calibration).read_text(encoding="utf-8")) if a.calibration else None)
+        except KeyError:
+            print(f"rig desconhecido: {a.export!r} (use {', '.join(sorted(RG.RIGS))})", file=sys.stderr)
+            return 2
+        for wmsg in res["warnings"]:
+            print(f"aviso: {wmsg}", file=sys.stderr)
+        sys.stdout.write(json.dumps(res, ensure_ascii=False, indent=2) + "\n")
+        return 0
+    if not a.out:
+        print("informe --out (ou --export RIG)", file=sys.stderr)
+        return 2
     if a.style == "construction":
         svg = skeleton.sheet_svg(raw["pose"], a.entity)
     else:   # manequim: uma figura limpa, própria para servir de referência
@@ -504,9 +519,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
 
     s = sub.add_parser("pose", help="folha de construção da pose (caixas, cilindros, esferas) em 3 vistas")
-    s.add_argument("scene"); s.add_argument("entity"); s.add_argument("--out", required=True)
+    s.add_argument("scene"); s.add_argument("entity"); s.add_argument("--out", help="arquivo de saída (obrigatório, exceto com --export)")
     s.add_argument("--style", choices=["mannequin", "construction"], default="mannequin",
                    help="mannequin: figura limpa de referência (padrão); construction: folha didática em 3 vistas, com caixas e cilindros")
+    s.add_argument("--export", metavar="RIG", help="em vez do desenho, imprime a pose em JSON com os nomes de osso do rig (scenelang, unity_humanoid, mixamo)")
+    s.add_argument("--calibration", metavar="JSON", help="calibração do rig: osso → eixo → {axis, sign, offset}; sem ela a saída vem marcada como não calibrada")
     s.set_defaults(fn=cmd_pose)
 
     s = sub.add_parser("correct", help="mede a imagem, grava o relatório e prepara o prompt da próxima rodada")

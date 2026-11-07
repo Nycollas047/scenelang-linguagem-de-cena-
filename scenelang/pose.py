@@ -28,26 +28,11 @@ import re
 
 from .checks import closest, is_num, unknown_keys
 
-# junta -> eixo -> (mín, máx, rótulo). Faixas de movimento típicas de adulto (valores ativos, arredondados).
-_LIMB = {
-    "shoulder": {"flex": (-50, 180), "abduct": (-30, 180), "rotate": (-90, 70)},
-    "elbow": {"flex": (0, 150)},
-    "wrist": {"flex": (-70, 80), "side": (-20, 30)},
-    "hip": {"flex": (-20, 120), "abduct": (-30, 45), "rotate": (-45, 45)},
-    "knee": {"flex": (0, 140)},
-    "ankle": {"flex": (-50, 20)},
-}
-_AXIAL = {
-    "neck": {"flex": (-50, 60), "turn": (-80, 80), "tilt": (-45, 45)},
-    "spine": {"flex": (-30, 80), "twist": (-45, 45), "side": (-35, 35)},
-}
-JOINTS: dict[str, dict[str, tuple[int, int]]] = dict(_AXIAL)
-for _name, _axes in _LIMB.items():
-    for _side in ("left", "right"):
-        JOINTS[f"{_side}_{_name}"] = _axes
+from . import anatomy as AN
 
-PRIMARY = {"shoulder": "flex", "elbow": "flex", "wrist": "flex", "hip": "flex", "knee": "flex", "ankle": "flex",
-           "neck": "turn", "spine": "flex"}
+# Compatibilidade: JOINTS/PRIMARY são as faixas do perfil padrão (human_adult). Use `AN.get_profile(...)` para outro perfil.
+JOINTS: dict[str, dict[str, tuple[int, int]]] = AN.PROFILES["human_adult"].limits
+PRIMARY = AN.PRIMARY
 
 JOINT_PT = {"neck": "o pescoço", "spine": "a coluna", "shoulder": "o ombro", "elbow": "o cotovelo", "wrist": "o punho",
             "hip": "o quadril", "knee": "o joelho", "ankle": "o tornozelo"}
@@ -65,7 +50,7 @@ AXIS_PT = {
 # Dobradiças: só têm um sentido, então a frase muda.
 HINGE_PT = {"elbow": "dobrado", "knee": "dobrado"}
 HAND_FOOT = {"left_hand": "a mão esquerda", "right_hand": "a mão direita", "left_foot": "o pé esquerdo", "right_foot": "o pé direito"}
-POSE_KEYS = {"body_yaw", "joints", "hold"}
+POSE_KEYS = {"body_yaw", "joints", "hold", "profile"}
 
 
 _PT_JOINT = {"cotovelo": "elbow", "joelho": "knee", "ombro": "shoulder", "quadril": "hip", "pulso": "wrist", "punho": "wrist",
@@ -135,6 +120,11 @@ def check(c, data: dict, scene) -> None:
             c.error(p, "deve ser um mapa (body_yaw, joints, hold)", got=po)
             continue
         unknown_keys(c, p, po, POSE_KEYS)
+        try:
+            prof = AN.get_profile(po.get("profile"))
+        except KeyError:
+            c.error(f"{p}.profile", "perfil anatômico desconhecido", got=po.get("profile"), accepted=sorted(AN.PROFILES))
+            prof = AN.get_profile(None)
         if "body_yaw" in po:
             v = po["body_yaw"]
             if not is_num(v) or not -180 <= v <= 180:
@@ -156,7 +146,7 @@ def check(c, data: dict, scene) -> None:
             if val is None:
                 c.error(jp, "deve ser um número (eixo principal) ou um mapa eixo → graus", got=raw)
                 continue
-            axes = JOINTS[name]
+            axes = prof.limits[name]
             for ax, deg in val.items():
                 ap = f"{jp}.{ax}"
                 if ax not in axes:
@@ -176,6 +166,7 @@ def check(c, data: dict, scene) -> None:
                 elif abs(deg) >= 0.9 * (hi if deg >= 0 else -lo) > 0:
                     c.warn(ap, f"{deg:g}° está no limite da junta ({lo}° a {hi}°): pose forçada, o modelo pode errar", hint="alivie alguns graus")
         _coherence(c, p, po, joints or {})
+        _heuristics(c, p, joints or {})
         hold = po.get("hold")
         if hold is not None:
             if not isinstance(hold, dict):
@@ -218,11 +209,28 @@ def _coherence(c, p: str, po: dict, joints: dict) -> None:
         c.warn(f"{p}.joints.spine", "tronco muito inclinado com braço quase vertical: pose de equilíbrio difícil, o modelo pode errar")
 
 
-def _joint_phrase(name: str, axes: dict) -> str:
+def _heuristics(c, p: str, joints: dict) -> None:
+    """Pose dentro das faixas, mas anatomicamente duvidosa. Avisos (nunca erros): são heurísticas, não um diagnóstico —
+    estar dentro dos limites numéricos de cada junta não garante que o corpo faça aquilo."""
+    for side in ("left", "right"):
+        hip, knee = _deg(joints, f"{side}_hip", "flex"), _deg(joints, f"{side}_knee", "flex")
+        if hip is not None and hip > 90 and (knee is None or knee < 30):
+            c.warn(f"{p}.joints.{side}_hip", f"perna quase reta levantada a {hip:g}°: a maioria das pessoas não passa de ~90° sem dobrar o joelho",
+                   hint="dobre o joelho ou reduza o quadril (heurística anatômica)")
+        ab, rot = _deg(joints, f"{side}_shoulder", "abduct"), _deg(joints, f"{side}_shoulder", "rotate")
+        if ab is not None and rot is not None and ab > 120 and rot > 30:
+            c.warn(f"{p}.joints.{side}_shoulder", "braço acima da altura do ombro girado para dentro: o ombro trava; gire para fora (rotate negativo)",
+                   hint="heurística anatômica")
+    turn, tilt = _deg(joints, "neck", "turn"), _deg(joints, "neck", "tilt")
+    if turn is not None and tilt is not None and abs(turn) > 60 and abs(tilt) > 30:
+        c.warn(f"{p}.joints.neck", "pescoço girado e inclinado perto do limite ao mesmo tempo: pose forçada (heurística anatômica)")
+
+
+def _joint_phrase(name: str, axes: dict, limits: dict | None = None) -> str:
     side, base = split(name)
     label = JOINT_PT[base] + (f" {SIDE_PT[side]}" if side else "")
     bits = []
-    lim = JOINTS[name]
+    lim = (limits or JOINTS)[name]
     for ax, deg in axes.items():
         if not deg:
             continue
@@ -255,6 +263,10 @@ def sentence(scene, entity_id: str) -> str | None:
     po = raw.get("pose")
     if not isinstance(po, dict):
         return None
+    try:
+        limits = AN.get_profile(po.get("profile")).limits
+    except KeyError:
+        limits = JOINTS
     out = []
     if is_num(po.get("body_yaw")):
         out.append(f"{_yaw_phrase(po['body_yaw'])} (giro de {po['body_yaw']:g}°)")
@@ -264,7 +276,7 @@ def sentence(scene, entity_id: str) -> str | None:
     for name, val in (po.get("joints") or {}).items():
         axes = normalize_joint(val, name) if name in JOINTS else None
         if axes:
-            ph = _joint_phrase(name, axes)
+            ph = _joint_phrase(name, axes, limits)
             if ph:
                 out.append(ph)
     for k, v in (po.get("hold") or {}).items():
