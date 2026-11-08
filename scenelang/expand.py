@@ -200,7 +200,20 @@ def _relative(d, ents, diags, notes):
             e.pop("at")
         pend = rest
     for i, e in pend:
-        _err(diags, f"$.entities[{i}].at", "dependência circular ou sem caixa: a posição de {0!r} depende de entidades sem posição".format(e.get("id")), got=e["at"])
+        pending_ids = {item.get("id") for _, item in pend if isinstance(item.get("id"), str)}
+        refs = []
+        at = e.get("at", {})
+        if isinstance(at, dict):
+            for key in (*REL_KEYS, "of", "anchor", "align_x", "align_y"):
+                value = at.get(key)
+                if isinstance(value, str):
+                    name = value.split(".", 1)[0]
+                    if name in pending_ids:
+                        refs.append(name)
+        circular = bool(refs)
+        kind = "dependência circular entre posições" if circular else "dependência sem resolução de posição"
+        _err(diags, f"$.entities[{i}].at", f"{kind}: {e.get('id')!r} depende de {', '.join(refs) if refs else 'uma entidade sem caixa'}", got=at,
+             accepted=sorted(pending_ids))
         e.pop("at")
     if derived:
         asserts = d.setdefault("asserts", [])

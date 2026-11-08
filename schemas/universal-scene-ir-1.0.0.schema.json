@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scenelang.dev/schemas/universal-scene-ir-1.0.0.schema.json",
+  "title": "SceneLang Universal Scene IR",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "coordinate_system", "entities", "geometry", "relations", "materials", "lighting", "camera", "temporal", "constraints", "metadata"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "id": {"type": "string", "minLength": 1},
+    "coordinate_system": {"type": "object", "required": ["dimension", "units", "handedness", "up_axis", "origin"], "properties": {"dimension": {"enum": [2, 3]}, "units": {"type": "string"}, "handedness": {"enum": ["left", "right", "not_applicable"]}, "up_axis": {"type": "string"}, "origin": {"type": "string"}}, "additionalProperties": true},
+    "entities": {"type": "array", "items": {"type": "object", "required": ["id", "kind"], "properties": {"id": {"type": "string", "minLength": 1}, "kind": {"type": "string", "minLength": 1}}, "additionalProperties": true}},
+    "geometry": {"type": "array", "items": {"type": "object", "required": ["entity", "type", "coordinates"], "properties": {"entity": {"type": "string"}, "type": {"type": "string"}, "coordinates": {"type": "array", "items": {"type": "number"}}, "space": {"type": "string"}}, "additionalProperties": true}},
+    "relations": {"type": "array", "items": {"type": "object"}},
+    "materials": {"type": "array", "items": {"type": "object"}},
+    "lighting": {"type": "array", "items": {"type": "object"}},
+    "camera": {"type": "object"},
+    "temporal": {"type": "object"},
+    "constraints": {"type": "array", "items": {"type": "object"}},
+    "metadata": {"type": "object"}
+  }
+}

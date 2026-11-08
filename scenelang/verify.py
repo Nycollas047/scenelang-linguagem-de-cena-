@@ -89,8 +89,38 @@ def parse(raw: str) -> Check:
         nums = args[:2]
     else:
         nums = args
-    if not all(is_num(a) and a > 0 for a in nums):
-        raise VerifySyntaxError(f"os argumentos numéricos de {name} devem ser positivos: {raw!r}")
+    if not all(is_num(a) for a in nums):
+        raise VerifySyntaxError(f"os argumentos numéricos de {name} devem ser números: {raw!r}")
+    # Limites por semântica: métricas normalizadas incluem 0 e 1; dimensões
+    # e distâncias precisam ser estritamente positivas.
+    positive = {"max_colors": (0,), "grid_aligned": (0,), "margin": (0,), "walkable_connected": (2,), "palette_match": (0,)}
+    for idx in positive.get(name, ()):
+        if idx < len(args) and args[idx] <= 0:
+            raise VerifySyntaxError(f"{name}: argumento {idx + 1} deve ser positivo: {raw!r}")
+    integer_limits = {"max_colors": (0, 16_777_216), "grid_aligned": (0, 8192), "margin": (0, 8192)}
+    if name in integer_limits and args:
+        idx, maximum = integer_limits[name]
+        if args[idx] > maximum:
+            raise VerifySyntaxError(f"{name}: argumento {idx + 1} deve ser ≤ {maximum}: {raw!r}")
+    bounded = {"symmetric": (1, 1.0), "grid_aligned": (1, 1.0), "palette_match": (1, 1.0), "fit_guides": (0, 0.5), "zone_quiet": (1, 1.0)}
+    if name == "zone_quiet" and len(args) == 1:
+        pass
+    elif name in bounded:
+        idx, maximum = bounded[name]
+        if len(args) > idx and not 0 <= args[idx] <= maximum:
+            raise VerifySyntaxError(f"{name}: argumento {idx + 1} deve estar entre 0 e {maximum:g}: {raw!r}")
+    if name == "zone_quiet" and len(args) > 1 and not 0 <= args[1] <= 1:
+        raise VerifySyntaxError("zone_quiet: tolerância deve estar entre 0 e 1")
+    if name in ("palette_match", "walkable_connected"):
+        idx = 0 if name == "palette_match" else 2
+        if len(args) > idx and args[idx] > 100:
+            raise VerifySyntaxError(f"{name}: tolerância de cor deve ser ≤ 100: {raw!r}")
+    if name == "max_colors" and args[0] != int(args[0]):
+        raise VerifySyntaxError("max_colors exige um inteiro positivo")
+    if name == "grid_aligned" and args and args[0] != int(args[0]):
+        raise VerifySyntaxError("grid_aligned exige uma grade inteira positiva")
+    if name == "margin" and args[0] != int(args[0]):
+        raise VerifySyntaxError("margin exige um número inteiro de células")
     return Check(name, args, raw)
 
 
@@ -235,10 +265,20 @@ def v_symmetric(f: Frame, a: list) -> Result:
         return Result("symmetric", False, "nenhum sujeito encontrado")
     x0, y0, x1, y1 = (int(round(v)) for v in (f.bbox[0] * f.W, f.bbox[1] * f.H, f.bbox[2] * f.W, f.bbox[3] * f.H))
     legs = "legs" in a
-    if legs:   # só as pernas (último terço): capa, cabelo e outras partes ao vento ficam de fora
+    if legs:   # mede só o terço inferior, mantendo o eixo do sujeito (não recentra em pernas assimétricas)
         y0 = y1 - max(1, (y1 - y0) * 3 // 10)
-        cols = np.where(f.fg[y0:y1].any(axis=0))[0]
-        x0, x1 = int(cols.min()), int(cols.max()) + 1
+        leg_fg = f.fg[y0:y1, x0:x1]
+        rows = np.where(leg_fg.any(axis=1))[0]
+        cols = np.where(leg_fg.any(axis=0))[0]
+        if not len(rows) or not len(cols):
+            return Result("symmetric(vertical, legs)", False, "nenhuma perna/silhueta encontrada no terço inferior")
+        axis = guides.axis_x(f.scene)
+        axis_px = int(round(axis * f.W)) if axis is not None else (x0 + x1) // 2
+        left, right = x0 + int(cols.min()), x0 + int(cols.max()) + 1
+        radius = max(axis_px - left, right - axis_px)
+        x0, x1 = max(0, axis_px - radius), min(f.W, axis_px + radius)
+        y0 += int(rows.min())
+        y1 = y0 + int(rows.max() - rows.min()) + 1
     sub = f.lab[y0:y1, x0:x1]
     fg = f.fg[y0:y1, x0:x1]
     flip, fgf = sub[:, ::-1], fg[:, ::-1]
@@ -252,8 +292,10 @@ def v_symmetric(f: Frame, a: list) -> Result:
 def v_fit_guides(f: Frame, a: list) -> Result:
     tol = float(a[0]) if a else 0.04
     lines = guides.guide_lines(f.scene)
-    if not lines or f.bbox is None:
-        return Result("fit_guides", False, "sem linhas-guia (modo model_proposes sem proposta?) ou sem sujeito")
+    if not lines:
+        return Result("fit_guides", False, "sem linhas-guia (modo model_proposes sem proposta?)")
+    if f.bbox is None:
+        return Result("fit_guides", False, "nenhum sujeito encontrado para comparar com as linhas-guia")
     ax = guides.axis_x(f.scene)
     top, bottom = f.bbox[1], f.bbox[3]
     errs = []
@@ -263,6 +305,8 @@ def v_fit_guides(f: Frame, a: list) -> Result:
         errs.append(("pés", bottom - lines["baseline"]))
     if ax is not None:
         errs.append(("eixo", (f.bbox[0] + f.bbox[2]) / 2 - ax))
+    if not errs:
+        return Result(f"fit_guides({tol:g})", False, "nenhuma linha-guia comparável encontrada")
     worst = max(abs(e) for _, e in errs)
     txt = ", ".join(f"{n} {e:+.1%}" for n, e in errs)
     return Result(f"fit_guides({tol:g})", worst <= tol, f"desvios: {txt} (tolerância ±{tol:.0%})", worst)
@@ -381,7 +425,9 @@ def v_walkable_connected(f: Frame, a: list) -> Result:
         x0, y0, x1, y1 = crop(e)
         refs.append(np.median(f.lab[y0:y1, x0:x1].reshape(-1, 3), axis=0))
     de = np.minimum(*[np.linalg.norm(f.lab - r, axis=-1) for r in refs])
-    mask = de <= tol
+    # O fundo estimado a partir da borda não é piso caminhável. Sem esta
+    # restrição, uma cor de parede parecida com o piso une salas falsas.
+    mask = (de <= tol) & f.fg
     rad = (f.scene.data.get("flow") or {}).get("player_radius")
     if isinstance(rad, (int, float)) and rad > 0:
         r = max(1, int(round(rad * f.H)))
@@ -454,9 +500,13 @@ def _despill(fg, alpha, key):
             out[..., i] = np.minimum(fg[..., i], cap)
         return out
     near_bg = ~solid
-    band = np.zeros_like(solid)
-    for _ in range(3):                      # faixa de 3 px em volta do fundo
-        near_bg = near_bg | np.roll(near_bg, 1, 0) | np.roll(near_bg, -1, 0) | np.roll(near_bg, 1, 1) | np.roll(near_bg, -1, 1)
+    for _ in range(3):                      # dilatação sem atravessar bordas da imagem
+        expanded = near_bg.copy()
+        expanded[1:] |= near_bg[:-1]
+        expanded[:-1] |= near_bg[1:]
+        expanded[:, 1:] |= near_bg[:, :-1]
+        expanded[:, :-1] |= near_bg[:, 1:]
+        near_bg = expanded
     band = near_bg & (alpha > 0)
     cap = fg[..., oth].max(axis=-1) if len(dom) == 1 else fg[..., oth[0]]
     out = fg.copy()

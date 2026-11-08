@@ -53,6 +53,8 @@ cena.yaml ─► expand (at, preset, auto_asserts, safe_zones) ─► validate �
 
 Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
 
+Representação independente de destino (experimental): [`docs/UNIVERSAL_SCENE_IR.md`](docs/UNIVERSAL_SCENE_IR.md).
+
 ## Comandos
 
 | Comando | O que faz |
@@ -104,7 +106,7 @@ Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
 
 ## Status
 
-**Versão 0.9 (experimental).** 415 testes passando (Python 3.13; a suíte ainda não foi executada em 3.10, o mínimo declarado). Histórico: [`docs/AUDITORIA.md`](docs/AUDITORIA.md) (auditoria v0.5→v0.7) e [`docs/LANGUAGE.md`](docs/LANGUAGE.md) (referência).
+**Versão 0.9 (experimental).** 428 testes passando, 4 ignorados (Python 3.15 neste checkout; a suíte ainda não foi executada em 3.10, o mínimo declarado). O IR universal está documentado como recurso experimental v1. Histórico: [`docs/AUDITORIA.md`](docs/AUDITORIA.md) (auditoria v0.5→v0.7), [`docs/LANGUAGE.md`](docs/LANGUAGE.md) (referência) e [`docs/UNIVERSAL_SCENE_IR.md`](docs/UNIVERSAL_SCENE_IR.md).
 
 **O que já foi medido**
 - Um teste de ponta a ponta com duas rodadas (relatório de campo, v0.7.1): na primeira, 5 de 6 restrições espaciais; após `correct`, 6 de 6. É **um caso**, não estatística.

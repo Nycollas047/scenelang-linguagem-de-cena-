@@ -254,7 +254,7 @@ def test_walkable_inconclusivo_reprova():
 
     _, s, _ = load(_rooms())
     r = verify.run(s, Image.new("RGB", (400, 200), (30, 30, 40)))[0]
-    assert r.ok and "conectado" in r.detail          # imagem lisa: tudo é piso e conecta (a medição não quebra nem inventa parede)
+    assert not r.ok and "inconclusiva" in r.detail   # sem borda/sujeito não há evidência de piso caminhável
 
 
 def test_walkable_ids_desconhecidos():

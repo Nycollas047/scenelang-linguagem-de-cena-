@@ -83,7 +83,9 @@ def resolve(data, base_dir: Path | None, _seen: tuple = ()):
             raise VariantError("extends deve ser o caminho de um arquivo")
         path = (root / ext).resolve()
         if path in _seen:
-            raise VariantError(f"extends em ciclo: {path.name}")
+            chain = _seen + (path,)
+            start = chain.index(path)
+            raise VariantError("extends em ciclo: " + " -> ".join(p.name for p in chain[start:]))
         base = resolve(_read(path), path.parent, _seen + (path,))
         result = merge(base, data)
     else:

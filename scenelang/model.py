@@ -109,6 +109,11 @@ class Scene:
         self.ratio = L.parse_ratio(canvas["ratio"])
         self.grid_kind = data["grid"]["kind"]
 
+    def to_universal_ir(self):
+        """Return the additive destination-neutral scene representation."""
+        from .universal_ir import from_scene
+        return from_scene(self)
+
     # ---- referências -------------------------------------------------
     def resolve(self, ref: str) -> Target:
         m = REF.match(str(ref).strip())

@@ -126,6 +126,15 @@ def test_despill_removes_key_tint_from_edges(data):
     assert (out[..., 1][ring] <= np.maximum(out[..., 0], out[..., 2])[ring] + 3).all()
 
 
+def test_despill_nao_conecta_faixa_pelas_bordas_da_imagem():
+    fg = np.zeros((8, 2, 3), dtype="float64")
+    fg[:] = (20, 200, 30)
+    alpha = np.ones((8, 2), dtype="float64")
+    alpha[0, 0] = 0
+    out = V._despill(fg, alpha, (0, 255, 0))
+    assert np.array_equal(out[-1], fg[-1])
+
+
 def test_symmetric_legs_ignores_wind_parts(data):
     _, scene = validate_data(data)
     key = fx.key_color(scene.data)
@@ -140,6 +149,21 @@ def test_symmetric_legs_ignores_wind_parts(data):
     scene.data["verify"] = ["symmetric(vertical, 0.8)", "symmetric(vertical, 0.8, legs)"]
     res = {r.raw: r for r in V.run(scene, img)}
     assert not res["symmetric(vertical, 0.8)"].ok and res["symmetric(vertical, 0.8, legs)"].ok
+
+
+def test_symmetric_legs_nao_recentra_pernas_assimetricas(data):
+    _, scene = validate_data(data)
+    key = fx.key_color(scene.data)
+    img = Image.new("RGB", (40, 40), key)
+    px = img.load()
+    for y in range(5, 25):
+        for x in range(15, 25):
+            px[x, y] = (40, 90, 210)  # torso define o eixo x=20
+    for y in range(25, 36):
+        for x in range(15, 19):
+            px[x, y] = (40, 90, 210)  # só uma perna, deslocada do eixo corporal
+    scene.data["verify"] = ["symmetric(vertical, 0.8, legs)"]
+    assert not V.run(scene, img)[0].ok
 
 
 def test_sheet_metrics_and_cli(data, tmp_path, capsys):

@@ -377,6 +377,13 @@ def test_fit_guides_detects_a_misplaced_sprite(planned):
     assert not results(scene, shifted)["fit_guides(0.04)"].ok
 
 
+def test_fit_guides_sem_linhas_comparaveis_falha_com_diagnostico(planned, monkeypatch):
+    _, scene = validate_data(planned)
+    monkeypatch.setattr(V.guides, "guide_lines", lambda _scene: {})
+    result = results(scene, make_sprite(scene))["fit_guides(0.04)"]
+    assert not result.ok and "sem linhas-guia" in result.detail
+
+
 def test_chroma_unclean_background_is_detected(planned):
     _, scene = validate_data(planned)
     arr = np.asarray(make_sprite(scene)).copy()
