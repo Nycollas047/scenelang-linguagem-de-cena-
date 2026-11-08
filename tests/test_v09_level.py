@@ -7,7 +7,7 @@ import yaml
 
 from scenelang import api
 from scenelang import layout as L
-from scenelang.assertions import evaluate_all
+from scenelang.assertions import evaluate_all, parse_assert
 from scenelang.compile import BACKENDS
 from scenelang.validate import load_text
 
@@ -352,3 +352,22 @@ def test_requires_chave_que_nao_abre_nada_e_inalcancavel():
         d["asserts"] = ["requires(atrio_entrada, sala_altar, cover_pilar_oeste)", "focal_single"]
     r = results(mutate(f))["requires(atrio_entrada, sala_altar, cover_pilar_oeste)"]
     assert not r.ok and "não abre nenhuma passagem" in r.detail
+
+
+def test_medicao_na_imagem_cobre_predicados_geometricos():
+    from scenelang.locate import recheck_asserts
+
+    _, s, _ = load(BASE)
+    measured = {e.id: tuple(e.box) for e in s.entities}
+    ok, skipped = recheck_asserts(s, measured)
+    names = {parse_assert(r.raw).name for r in ok}
+    assert {"occluded", "line_of_sight", "no_overlap", "clearance"} <= names and not skipped
+    # um bloqueador sem medida torna o veredito de visão indecidível: vira «não medido», não aprovado
+    measured.pop("cover_pilar_oeste")
+    ok2, skipped2 = recheck_asserts(s, measured)
+    assert any(x.startswith("occluded") or x.startswith("line_of_sight") for x in skipped2)
+    # sobreposição medida (porta em cima de cobertura) reprova de verdade
+    measured = {e.id: tuple(e.box) for e in s.entities}
+    measured["cover_pilar_oeste"] = tuple(s.by_id["porta_entrada"].box)
+    ok3, _ = recheck_asserts(s, measured)
+    assert not next(r for r in ok3 if r.raw == "no_overlap(cover, door)").ok

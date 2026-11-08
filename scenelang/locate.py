@@ -21,6 +21,28 @@ from . import palette as PAL
 from .assertions import evaluate, parse_assert
 
 POSITION_PREDICATES = {"above", "below", "left_of", "right_of", "inside", "near", "visible"}
+# v0.9: predicados geométricos que também se medem na imagem (os de grafo e `count` são de projeto/contagem, ficam de fora)
+GEOMETRIC_PREDICATES = {"no_overlap", "line_of_sight", "occluded", "clearance", "clear_zone"}
+MEASURED_PREDICATES = POSITION_PREDICATES | GEOMETRIC_PREDICATES
+
+
+def _needed(scene, a) -> set[str]:
+    """Entidades que PRECISAM ter sido medidas para o assert valer: as citadas e, nos geométricos, todas as que entram na conta
+    (grupo de no_overlap, bloqueadores de visão, entidades proibidas na zona). Misturar caixa medida com declarada daria veredito falso."""
+    from . import vocab as V
+    from . import zones
+    from .assertions import group
+
+    refs = {str(x).split(".")[0] for x in a.args if isinstance(x, str)} & set(scene.by_id)
+    if a.name == "no_overlap":
+        refs |= {e.id for arg in a.args for e in group(scene, arg)}
+    elif a.name in ("line_of_sight", "occluded"):
+        refs |= {e.id for e in scene.entities if set(e.tags) & set(V.SIGHT_BLOCKER_TAGS)}
+    elif a.name == "clear_zone":
+        z = zones.zones(scene.data).get(a.args[0])
+        if z:
+            refs |= {e.id for e in scene.entities if zones.forbidden(e, z.get("rule", "background_only"))}
+    return refs
 MIN_AREA = 0.002          # fração do quadro: abaixo disso é ruído, não entidade
 SIG_TOL = 14.0            # ΔE (CIE76) aceito em torno da cor-assinatura
 SPREAD_FACTOR = 2.5       # caixa medida por cor maior que isto × a declarada: a cor está espalhada em outras coisas
@@ -255,10 +277,9 @@ def recheck_asserts(scene, measured: dict[str, tuple]):
     ok, skipped = [], []
     for raw in scene.data.get("asserts") or []:
         a = parse_assert(raw)
-        if a.name not in POSITION_PREDICATES:
+        if a.name not in MEASURED_PREDICATES:
             continue
-        refs = {str(x).split(".")[0] for x in a.args if isinstance(x, str)}
-        need = refs & set(scene.by_id)
+        need = _needed(scene, a)
         if need - set(measured):
             skipped.append(raw)
             continue
