@@ -139,6 +139,7 @@ PREDICATES = (
     "facing",
     "brightest",
     "focal_single",
+    "clear_zone",
 )
 
 REJECTION_TAGS = ("direção", "luz", "proporção", "estilo", "anatomia", "enquadramento")

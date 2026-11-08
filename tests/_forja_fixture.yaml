@@ -1,0 +1,19 @@
+scene: "A Forjadora de Estrelas"
+canvas: {shape: rect, ratio: "16:9"}
+grid: {kind: golden}
+style: {base: "pintura épica de fantasia"}
+intent: {focal: orb, emotion: "reverência"}
+safe_zones:
+  - {id: titulo, box: [0.05, 0.03, 0.30, 0.14], rule: background_only, purpose: "espaço escuro para o título"}
+auto_asserts: [horizontal_order]
+entities:
+  - {id: mage, kind: character, label: "a forjadora", desc: "maga de avental de couro", plane: foreground, box: [0.14, 0.30, 0.20, 0.62], orient: right,
+     pose: {preset: blacksmith_strike, joints: {neck: {turn: -25}}, hold: {right_hand: hammer, left_hand: orb}}}
+  - {id: anvil, kind: prop, label: "a bigorna", desc: "bigorna de ferro", plane: midground, at: {right_of: mage, gap: 0.02}, size: [0.14, 0.12]}
+  - {id: orb, kind: light_source, label: "o orbe estelar", desc: "esfera de luz dourada", plane: midground, at: {above: anvil, gap: 0.01}, size: [0.08, 0.12]}
+  - {id: hammer, kind: prop, label: "o martelo rúnico", desc: "martelo com runas", plane: foreground, at: {anchor: mage.top, offset: [0.05, 0.0]}, size: [0.06, 0.1]}
+  - {id: serpent, kind: creature, label: "a serpente", desc: "serpente de escamas", plane: midground, box: [0.62, 0.25, 0.30, 0.55], orient: left}
+interactions:
+  - {from: mage.right_hand, verb: "ergue para golpear", to: hammer}
+  - {from: mage.face, verb: "encara", to: serpent.head}
+asserts: ["left_of(mage, serpent)"]

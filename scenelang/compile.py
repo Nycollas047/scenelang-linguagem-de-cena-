@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from . import character, fx, guides, materials, pose
+from . import character, fx, guides, interactions, materials, pose
 from . import layout as L
 from . import palette as PAL
 from . import phrases as P
@@ -56,13 +56,15 @@ def priorities(scene: Scene) -> tuple[list[str], list[str]]:
     return out, reminders
 
 
-def entity_extras(scene: Scene, entity_id: str) -> list[str]:
-    """Frases de camadas (personagem, pose, material, vento) de uma entidade; vazio quando não há."""
-    fns = (character.sentence, pose.sentence, materials.entity_sentence, fx.wind_sentence)
-    return [t for t in (fn(scene, entity_id) for fn in fns) if t]
+EXTRA_FNS = {"character": character.sentence, "pose": pose.sentence, "material": materials.entity_sentence, "wind": fx.wind_sentence}
 
 
-def entity_sentence(scene: Scene, e: Entity) -> str:
+def entity_extras(scene: Scene, entity_id: str, skip: frozenset = frozenset()) -> list[str]:
+    """Frases de camadas (personagem, pose, material, vento) de uma entidade; vazio quando não há. `skip` poda camadas."""
+    return [t for t in (fn(scene, entity_id) for k, fn in EXTRA_FNS.items() if k not in skip) if t]
+
+
+def entity_sentence(scene: Scene, e: Entity, skip: frozenset = frozenset()) -> str:
     where = P.entity_position(e, scene.grid_kind)
     sep = ", " if where.startswith("com ") else " "
     parts = [f"{P.cap(e.label)}{sep}{where}: {e.desc}."]
@@ -72,8 +74,9 @@ def entity_sentence(scene: Scene, e: Entity) -> str:
         parts.append("É o elemento mais brilhante e mais saturado da imagem.")
     elif e.brightness == "low" or e.saturation == "muted":
         parts.append("Permanece discreto: baixa saturação e brilho contido.")
-    parts.extend(f"{d}." if not d.endswith(".") else d for d in e.details)
-    for extra in entity_extras(scene, e.id):
+    if "details" not in skip:
+        parts.extend(f"{d}." if not d.endswith(".") else d for d in e.details)
+    for extra in entity_extras(scene, e.id, skip):
         if extra:
             parts.append(extra)
     return " ".join(parts)
@@ -153,7 +156,7 @@ def avoid_affirmations(scene: Scene) -> list[str]:
     return out
 
 
-def build_ir(scene: Scene, passname: str | None = None) -> dict:
+def build_ir(scene: Scene, passname: str | None = None, skip: frozenset = frozenset()) -> dict:
     d = scene.data
     prios, reminders = priorities(scene)
     style = d["style"]
@@ -176,11 +179,15 @@ def build_ir(scene: Scene, passname: str | None = None) -> dict:
                 f"História: {intent['story']}." if intent.get("story") else "",
             ) if x
         )
+    focal_ent = scene.focal_target().entity
     ir["planos"] = {
-        plane: [entity_sentence(scene, e) for e in scene.entities if e.plane == plane]
+        plane: [entity_sentence(scene, e, frozenset() if focal_ent is e else skip) for e in scene.entities if e.plane == plane]
         for plane in PLANE_ORDER
         if any(e.plane == plane for e in scene.entities)
     }
+    inter = interactions.sentences(scene)
+    if inter:
+        ir["interacoes"] = inter
     if d.get("lights"):
         ir["iluminacao"] = [light_sentence(scene, li) for li in d["lights"]]
     cam = camera_sentence(scene)
@@ -217,7 +224,10 @@ def build_ir(scene: Scene, passname: str | None = None) -> dict:
 
 # ---------------------------------------------------------------------------
 def to_prose(scene: Scene, passname: str | None = None) -> str:
-    ir = build_ir(scene, passname)
+    return _prose_from_ir(build_ir(scene, passname))
+
+
+def _prose_from_ir(ir: dict) -> str:
     head = f"Ilustração: {ir['estilo']}. {ir['quadro']} {ir['grade']}"
     for k in ("pixel", "guias"):
         if k in ir:
@@ -232,6 +242,8 @@ def to_prose(scene: Scene, passname: str | None = None) -> str:
     for plane, sentences in ir["planos"].items():
         lines.append(f"{V.PLANE_PT[plane]}:")
         lines += [f"- {s}" for s in sentences]
+    if "interacoes" in ir:
+        lines += ["", "INTERAÇÕES:"] + [f"- {s}" for s in ir["interacoes"]]
     if "iluminacao" in ir:
         lines += ["", "ILUMINAÇÃO:"] + [f"- {s}" for s in ir["iluminacao"]]
     if "camera" in ir:
@@ -271,7 +283,7 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
     style = d["style"]
     weights = {k: float(v) / 100.0 for k, v in (style.get("mix") or {}).items()}
     global_bits = [ir["estilo"], ir["quadro"], ir["grade"]]
-    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera", "intencao", "iluminacao", "ordem_do_olhar",
+    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera", "intencao", "interacoes", "iluminacao", "ordem_do_olhar",
                 "detalhes", "detalhe_de_textura", "manter_igual", "acabamento", "correcoes", "lembrete_final"):
         if key in ir:
             v = ir[key]
@@ -305,6 +317,10 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
 
 
 def to_compact(scene: Scene, passname: str | None = None) -> str:
+    return _compact_from_ir(build_ir(scene, passname))
+
+
+def _compact_from_ir(ir: dict) -> str:
     """Mesmo conteúdo da prosa, sem cabeçalhos, sem numeração e sem o que a prosa repete: menos tokens, com perdas DECLARADAS.
 
     Fora dela: o bloco PRIORIDADES (as frases dos asserts: a posição de cada entidade segue na própria frase da entidade),
@@ -312,18 +328,59 @@ def to_compact(scene: Scene, passname: str | None = None) -> str:
     """
     from . import pose as PO
 
-    ir = build_ir(scene, passname)
     parts = [ir["estilo"], ir["quadro"], ir["grade"]]
     for key in ("intencao", "atmosfera"):
         if key in ir:
             parts.append(ir[key])
     for plane, sentences in ir["planos"].items():
         parts.append(f"[{plane}] " + " ".join(sentences))
-    for key in ("iluminacao", "camera", "detalhe_de_textura", "paleta", "detalhes", "fundo", "acabamento", "manter_igual", "correcoes"):
+    for key in ("interacoes", "iluminacao", "camera", "detalhe_de_textura", "paleta", "detalhes", "fundo", "acabamento", "manter_igual", "correcoes"):
         if key in ir:
             v = ir[key]
             parts.append(" ".join(v) if isinstance(v, list) else v)
     return " ".join(parts).replace(PO.POSE_HEADER, PO.POSE_HEADER_SHORT) + "\n"
+
+
+# ---- orçamento de tokens ---------------------------------------------------------------------------------------
+# Do que menos pesa para o que mais pesa. Nunca se poda: estilo, quadro, grade, prioridades essenciais, frase-base de cada
+# entidade, câmera, fundo, acabamento, travas e correções; a entidade focal mantém todas as camadas.
+BUDGET_LADDER = ("detalhe_de_textura", "ordem_do_olhar", "lembrete_final", "detalhes", "entity:wind", "entity:details", "entity:material",
+                 "iluminacao", "atmosfera", "entity:pose", "entity:character", "intencao", "paleta", "prioridades")
+PRIORITY_KEEP = 6      # no último degrau, ficam o foco, os reforçados e os primeiros asserts até este total
+
+
+def _render_budget(scene, target, passname, dropped):
+    skip = frozenset(k.split(":", 1)[1] for k in dropped if k.startswith("entity:"))
+    ir = build_ir(scene, passname, skip)
+    for k in dropped:
+        if not k.startswith("entity:") and k != "prioridades":
+            ir.pop(k, None)
+    if "prioridades" in dropped:
+        boost, _ = _ordered_asserts(scene)
+        keep = max(PRIORITY_KEEP, 1 + len(boost))
+        ir["prioridades"] = ir["prioridades"][:keep]
+    return (_prose_from_ir if target == "prose" else _compact_from_ir)(ir)
+
+
+def compile_budget(scene: Scene, target: str = "prose", tokens: int = 250, passname: str | None = None) -> dict:
+    """Compila `prose`/`compact` dentro de um orçamento de tokens, podando degrau a degrau o que menos pesa.
+
+    Devolve {text, tokens, method, budget, fits, dropped}. `dropped` lista o que saiu (para o relatório de perdas); se mesmo
+    assim estourar, `fits` é False e o texto é o mínimo possível — nada essencial é cortado só para caber."""
+    from .bench import count_tokens
+
+    if target not in ("prose", "compact"):
+        raise ValueError("--token-budget só vale para os destinos prose e compact")
+    dropped: list[str] = []
+    text = _render_budget(scene, target, passname, dropped)
+    info = count_tokens(text)
+    for step in BUDGET_LADDER:
+        if info["tokens"] <= tokens:
+            break
+        dropped.append(step)
+        text = _render_budget(scene, target, passname, dropped)
+        info = count_tokens(text)
+    return {"text": text, "tokens": info["tokens"], "method": info["method"], "budget": tokens, "fits": info["tokens"] <= tokens, "dropped": dropped}
 
 
 BACKENDS = {"prose": to_prose, "json": to_json, "regions": to_regions, "compact": to_compact}

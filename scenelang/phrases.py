@@ -134,7 +134,8 @@ def entity_position(entity, grid_kind: str) -> str:
             f"com a ponta {position_of_point(grid_kind, tip)} "
             f"e a base {position_of_point(grid_kind, base)}"
         )
-    return position_of_point(grid_kind, entity.center, tol=0.0)
+    # grade áurea: centro colado num ponto de interesse (<= 0.06) descreve o próprio ponto, em vez de «no centro»
+    return position_of_point(grid_kind, entity.center, tol=0.06 if grid_kind == "golden" else 0.0)
 
 
 def assert_texts(scene, a) -> tuple[str, str]:
@@ -174,6 +175,11 @@ def assert_texts(scene, a) -> tuple[str, str]:
             f"{cap(tp(0))} é o elemento mais brilhante e mais saturado da imagem.",
             f"{cap(tp(0))} é o elemento mais brilhante e mais saturado da imagem?",
         )
+    if n == "clear_zone":
+        from . import zones
+
+        txt = zones.phrase(scene, zones.zones(scene.data)[args[0]])
+        return (txt, txt.rstrip(".") + "?")
     if n == "focal_single":
         return ("A imagem tem um único ponto focal.", "A imagem tem um único ponto focal, claro e dominante?")
     return (a.raw, a.raw + "?")

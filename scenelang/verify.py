@@ -22,9 +22,9 @@ from . import fx, guides
 from . import palette as PAL
 from .checks import is_num, suggest
 
-NAMES = ("max_colors", "grid_aligned", "symmetric", "fit_guides", "palette_match", "chroma_clean", "no_spill", "margin")
+NAMES = ("max_colors", "grid_aligned", "symmetric", "fit_guides", "palette_match", "chroma_clean", "no_spill", "margin", "zone_quiet")
 ARITY = {"max_colors": (1, 1), "grid_aligned": (0, 2), "symmetric": (1, 3), "fit_guides": (0, 1),
-         "palette_match": (1, 3), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1)}
+         "palette_match": (1, 3), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1), "zone_quiet": (1, 2)}
 CALL = re.compile(r"^\s*([a-z_]+)\s*\((.*)\)\s*$")
 
 
@@ -75,7 +75,11 @@ def parse(raw: str) -> Check:
         if not isinstance(ent, str):
             raise VerifySyntaxError("o terceiro argumento de palette_match é o id de uma entidade: palette_match(10, 0.9, pirate)")
         args.append(ent)
-    if name == "symmetric":
+    if name == "zone_quiet":
+        if not isinstance(args[0], str) or is_num(args[0]):
+            raise VerifySyntaxError("o primeiro argumento de zone_quiet é o id de uma zona: zone_quiet(title_area, 0.08)")
+        nums = args[1:]
+    elif name == "symmetric":
         nums = [a for a in args[1:] if a != "legs"]
     elif name == "palette_match":
         nums = args[:2]
@@ -109,6 +113,9 @@ def check(c, data: dict) -> None:
             c.error(p, "fit_guides exige a camada guides", got=raw)
         if ck.name in ("chroma_clean", "no_spill") and bg.get("mode") != "chromakey":
             c.error(p, f"{ck.name} exige background.mode: chromakey", got=raw)
+        if ck.name == "zone_quiet" and ck.args[0] not in {z.get("id") for z in data.get("safe_zones") or [] if isinstance(z, dict)}:
+            c.error(p, f"zona desconhecida em zone_quiet: {ck.args[0]!r}", got=raw,
+                    accepted=[z.get("id") for z in data.get("safe_zones") or [] if isinstance(z, dict)])
         if ck.name == "palette_match" and not data.get("palette"):
             c.error(p, "palette_match exige a camada palette", got=raw)
         if ck.name == "palette_match" and len(ck.args) == 3:
@@ -313,14 +320,38 @@ def v_margin(f: Frame, a: list) -> Result:
     return Result(f"margin({need})", least >= need - 0.25, f"menor margem {least:.1f} célula(s) (mínimo {need})", least)
 
 
-FUNCS = {"max_colors": v_max_colors, "grid_aligned": v_grid_aligned, "symmetric": v_symmetric, "fit_guides": v_fit_guides,
+ZONE_QUIET_DEFAULT = 0.10      # desvio-padrão da luminância (0–1) até o qual a zona conta como «quieta»
+
+
+def v_zone_quiet(f: Frame, a: list) -> Result:
+    """A zona de respiro tem pouca variação de luminância (fundo liso o bastante para o texto/logotipo ficar legível)."""
+    np, _ = _np()
+    zid = a[0]
+    limit = float(a[1]) if len(a) > 1 else ZONE_QUIET_DEFAULT
+    zone = next((z for z in f.scene.data.get("safe_zones") or [] if isinstance(z, dict) and z.get("id") == zid), None)
+    raw = f"zone_quiet({zid}" + (f", {a[1]:g}" if len(a) > 1 else "") + ")"
+    if zone is None:
+        return Result(raw, False, f"zona {zid!r} não existe")
+    x, y, w, h = zone["box"]
+    x0, y0 = int(round(x * f.W)), int(round(y * f.H))
+    x1, y1 = max(x0 + 1, int(round((x + w) * f.W))), max(y0 + 1, int(round((y + h) * f.H)))
+    crop = f.rgb[y0:y1, x0:x1].astype("float64") / 255.0
+    lum = crop[..., 0] * 0.2126 + crop[..., 1] * 0.7152 + crop[..., 2] * 0.0722
+    std = float(lum.std())
+    return Result(raw, std <= limit, f"desvio da luminância {std:.3f} (limite {limit:g}) em {lum.size} px", std)
+
+
+FUNCS = {"zone_quiet": v_zone_quiet, "max_colors": v_max_colors, "grid_aligned": v_grid_aligned, "symmetric": v_symmetric, "fit_guides": v_fit_guides,
          "palette_match": v_palette_match, "chroma_clean": v_chroma_clean, "no_spill": v_no_spill, "margin": v_margin}
 
 
 def run(scene, image) -> list[Result]:
+    raws = scene.data.get("verify", []) or []
+    if not raws:
+        return []          # sem verificador declarado: não exige numpy nem abre a imagem
     f = Frame(scene, image)
     out = []
-    for raw in scene.data.get("verify", []) or []:
+    for raw in raws:
         ck = parse(raw)
         r = FUNCS[ck.name](f, ck.args)
         r.raw = raw

@@ -55,6 +55,7 @@ def plan(scene_text: str, out_dir: str | Path, baseline: str | None = None, prev
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    (out / "cena.yaml").write_text(scene_text, encoding="utf-8")     # `record` usa esta cópia se --scene não vier
     diags, scene, _ = load_text(scene_text)
     if scene is None:
         raise ValueError("cena inválida: " + "; ".join(str(d) for d in diags if d.level == "error")[:300])
@@ -105,6 +106,12 @@ def record(out_dir: str | Path, mode: str, run_id: str, scene_text: str | None =
         raise ValueError(f"modo desconhecido: {mode!r} (use {', '.join(MODES)})")
     rec: dict = {"modo": mode, "execucao": run_id, "tokens_saida": tokens_out, "chamadas": calls, "tentativas": attempts, "custo_usd": cost_usd,
                  "latencia_s": latency_s, "correcoes": corrections, "notas": notes, "imagem": image, "restricoes": None}
+    if not scene_text and (Path(out_dir) / "cena.yaml").exists():
+        scene_text = (Path(out_dir) / "cena.yaml").read_text(encoding="utf-8")
+    if (image or boxes) and not scene_text:
+        import sys
+
+        print("aviso: --image/--boxes informados sem --scene; as restrições não serão medidas (restricoes: null)", file=sys.stderr)
     if image and scene_text:
         from PIL import Image
 

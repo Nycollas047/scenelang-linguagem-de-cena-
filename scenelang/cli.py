@@ -109,7 +109,16 @@ def cmd_compile(a) -> int:
         if a.strict and LS.blocking(items):
             print("modo estrito: há perdas ou falta de asserts; nada foi compilado", file=sys.stderr)
             return 3
-    if a.target == "regions":
+    if getattr(a, "token_budget", None):
+        from .compile import compile_budget
+        from . import loss as LS
+
+        res = compile_budget(scene, a.target, a.token_budget, a.passname)
+        for it in LS.budget_losses(res["dropped"], a.token_budget, res["fits"]):
+            print(it, file=sys.stderr)
+        print(f"orçamento: {res['tokens']}/{a.token_budget} tokens ({res['method']}); {'cabe' if res['fits'] else 'NÃO cabe'}", file=sys.stderr)
+        out = res["text"]
+    elif a.target == "regions":
         out = to_regions(scene, a.size, a.passname)
     else:
         out = BACKENDS[a.target](scene, a.passname)
@@ -582,6 +591,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--loss", nargs="?", const="lost", choices=["lost", "all"], default=False,
                    help="lista o que a cena declara e o backend não leva (ou leva só aproximado) ao gerador; `--loss all` inclui também o que chega intacto")
     s.add_argument("--strict", action="store_true", help="falha (código 3) se houver perda real ou a cena não tiver asserts")
+    s.add_argument("--token-budget", type=int, default=None, metavar="N",
+                   help="só prose/compact: poda por prioridade até caber em N tokens e declara o que saiu como perda")
     s.add_argument("--out"); s.set_defaults(fn=cmd_compile)
 
     s = sub.add_parser("bench", help="estrutura de benchmark SceneLang × prompt convencional (não chama gerador algum)")

@@ -17,6 +17,7 @@ from . import layout as L
 from . import vocab as V
 from .assertions import AssertSyntaxError, check_refs, parse_assert
 from .model import SLUG, Diagnostic, RefError, Scene, build_scene
+from . import interactions, zones
 from . import character, fx, guides, lint, locate, materials, pose, palette as pal_layer
 from . import variants
 from . import verify as verify_mod
@@ -27,6 +28,7 @@ TOP_KEYS = {
     "lights", "entities", "gaze", "asserts", "details", "finish", "glossary",
     "avoid", "priority_boost", "history", "corrections",
     "colors", "guides", "background", "atmosphere", "materials", "detail", "verify", "lock", "extends", "import",
+    "auto_asserts", "interactions", "safe_zones",
 }
 REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
 ENTITY_KEYS = {
@@ -210,6 +212,9 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
     _check_lights(c, data, scene)
     _check_gaze(c, data, scene)
     _check_asserts(c, data, scene)
+    _check_auto_asserts(c, data)
+    interactions.check(c, data, scene)
+    zones.check(c, data, scene)
     _check_misc(c, data)
     pal_layer.check(c, data)
     guides.check(c, data, scene)
@@ -422,6 +427,20 @@ def _check_asserts(c: _Collector, data: dict, scene: Scene | None) -> None:
                 c.error(p, str(e), got=raw, accepted=e.accepted)
 
 
+def _check_auto_asserts(c: _Collector, data: dict) -> None:
+    from .expand import AUTO_KINDS
+
+    auto = data.get("auto_asserts")
+    if auto is None:
+        return
+    if not isinstance(auto, list) or not auto or not all(isinstance(x, str) for x in auto):
+        c.error("$.auto_asserts", "deve ser uma lista não vazia de nomes", got=auto, accepted=sorted(AUTO_KINDS))
+        return
+    for i, name in enumerate(auto):
+        if name not in AUTO_KINDS:
+            c.error(f"$.auto_asserts[{i}]", "regra de inferência desconhecida", got=name, accepted=sorted(AUTO_KINDS), hint=_suggest(name, AUTO_KINDS))
+
+
 def _check_misc(c: _Collector, data: dict) -> None:
     for key in ("details", "avoid", "priority_boost", "corrections"):
         if key in data:
@@ -476,5 +495,8 @@ def load_text(text: str, base_dir: str | Path | None = None) -> tuple[list[Diagn
     from . import normalize
 
     data, _notes = normalize.apply_defaults(data)
+    from . import expand
+
+    data, pre, _notes2 = expand.apply(data)
     diags, scene = validate_data(data)
-    return diags, scene, data
+    return pre + diags, (scene if not pre else None), data

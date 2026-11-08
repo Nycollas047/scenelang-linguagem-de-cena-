@@ -216,6 +216,14 @@ def _scales_phrase(sc: dict, data: dict) -> str:
     return text
 
 
+def _agree(finish: str, noun: str) -> str:
+    """Acorda o acabamento com o gênero do material: «pedra» + «áspero» → «áspera»."""
+    last = noun.split()[-1] if noun else ""
+    if finish and (last.endswith(("a", "ã")) or last == "pele"):
+        return " ".join(w[:-1] + "a" if w.endswith("o") else w for w in finish.split(" "))
+    return finish
+
+
 def describe(spec: dict, data: dict) -> str:
     bits = []
     fin = FINISHES.get(spec.get("finish", ""), "")
@@ -226,7 +234,7 @@ def describe(spec: dict, data: dict) -> str:
     elif "fabric" in spec:
         bits.append(f"tecido de {FABRICS[spec['fabric']]} {fin}".strip())
     elif "base" in spec:
-        bits.append(f"{BASES[spec['base']]} {fin}".strip())
+        bits.append(f"{BASES[spec['base']]} {_agree(fin, BASES[spec['base']])}".strip())
     else:   # só weave/drape → tecido
         bits.append(f"tecido {fin}".strip())
     for key, table in (("weave", WEAVES), ("drape", DRAPES)):

@@ -41,6 +41,9 @@ _fate("meta", "nome/versão da cena: controle, não vai ao gerador", "scene", "v
 _fate("meta", "registro de rodadas: controle, não vai ao gerador", "history")
 _fate("preserved", "vira texto do prompt", "canvas", "grid", "style", "intent", "camera", "lights", "gaze", "details", "finish", "atmosphere",
       "background", "materials", "detail", "lock", "corrections", "priority_boost", "colors", "entities")
+_fate("preserved", "vira frase ativa no prompt (bloco INTERAÇÕES)", "interactions")
+_fate("preserved", "a zona vira frase de prioridade e assert `clear_zone`; a imagem pronta é medida por `zone_quiet`", "safe_zones")
+_fate("meta", "atalho expandido em `asserts` antes de compilar: o que chega ao prompt são os asserts gerados", "auto_asserts")
 _fate("approx", "linhas-guia viram frases; a geometria exata não chega", "guides")
 _fate("approx", "pedidos negativos viram afirmações equivalentes; a forma original não chega", "avoid")
 _fate("approx", "a paleta chega como nomes/hex no texto; o gerador não é obrigado a usar só essas cores", "palette")
@@ -129,6 +132,19 @@ def _fates(d: dict, backend: str) -> list[Loss]:
         out.append(Loss("external", "$.background", "fundo de chroma key: o recorte e a limpeza do vazamento são feitos depois (`scenelang cutout`)"))
     if any(isinstance(e.get("pose"), dict) for e in ents):
         out.append(Loss("external", "$.entities[*].pose", "a pose só é seguida de perto com o guia em imagem (`scenelang pack`/`pose`); só em texto o gerador aproxima"))
+    return out
+
+
+def budget_losses(dropped: list[str], budget: int, fits: bool) -> list[Loss]:
+    """Perdas causadas por `compile --token-budget`: cada degrau podado vira uma linha `lost`."""
+    names = {"detalhe_de_textura": "detalhe de textura", "ordem_do_olhar": "ordem do olhar", "lembrete_final": "lembrete final",
+             "detalhes": "detalhes globais", "iluminacao": "iluminação", "atmosfera": "atmosfera", "intencao": "intenção",
+             "paleta": "paleta", "prioridades": "prioridades além das essenciais", "entity:wind": "vento das entidades não focais",
+             "entity:details": "detalhes das entidades não focais", "entity:material": "materiais das entidades não focais",
+             "entity:pose": "pose das entidades não focais", "entity:character": "ficha de personagem das entidades não focais"}
+    out = [Loss("lost", f"$.budget.{d}", f"removido para caber em {budget} tokens: {names.get(d, d)}") for d in dropped]
+    if not fits:
+        out.append(Loss("lost", "$.budget", f"nem podando tudo cabe em {budget} tokens: o mínimo seguro ficou acima do orçamento"))
     return out
 
 

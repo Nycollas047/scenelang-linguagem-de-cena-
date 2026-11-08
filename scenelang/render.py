@@ -12,6 +12,7 @@ from html import escape
 from pathlib import Path
 
 from . import guides as G
+from . import zones
 from . import skeleton
 from . import layout as L
 from . import vocab as V
@@ -85,6 +86,15 @@ def render_svg(scene: Scene, width: int = 960) -> str:
     o.extend(G.svg(scene, px, py, ox, W, H))
     o.append('</g>')
 
+    # zonas de respiro (safe_zones)
+    for zid, z in zones.zones(scene.data).items():
+        zx, zy, zw, zh = (float(v) for v in z["box"])
+        bad = bool(zones.offenders(scene, z))
+        col = "#b91c1c" if bad else "#0e7490"
+        o.append(f'<rect x="{px(zx):.1f}" y="{py(zy):.1f}" width="{zw * W:.1f}" height="{zh * H:.1f}" fill="{col}" fill-opacity="0.08" '
+                 f'stroke="{col}" stroke-width="2" stroke-dasharray="8 5"/>')
+        o.append(f'<text x="{px(zx) + 6:.1f}" y="{py(zy) + 15:.1f}" font-size="11" font-weight="700" fill="{col}">zona livre: {escape(zid)}</text>')
+
     # entidades, do fundo para a frente
     for plane in V.PLANES:
         for e in [e for e in scene.entities if e.plane == plane]:
@@ -147,6 +157,39 @@ def render_svg(scene: Scene, width: int = 960) -> str:
     return "\n".join(o)
 
 
+def svg_to_png(svg_path: str | Path, png_path: str | Path) -> bool:
+    """SVG → PNG. Tenta `rsvg-convert`; sem ele, cai para librsvg via `gi` + cairo e, por fim, cairosvg.
+    Devolve False (sem erro) se nenhum conversor existir."""
+    svg_path, png_path = Path(svg_path), Path(png_path)
+    exe = shutil.which("rsvg-convert")
+    if exe:
+        subprocess.run([exe, "-o", str(png_path), str(svg_path)], check=True)
+        return True
+    try:
+        import cairo  # type: ignore
+        import gi  # type: ignore
+
+        gi.require_version("Rsvg", "2.0")
+        from gi.repository import Rsvg  # type: ignore
+
+        handle = Rsvg.Handle.new_from_file(str(svg_path))
+        dim = handle.get_dimensions()
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, max(1, int(dim.width)), max(1, int(dim.height)))
+        ctx = cairo.Context(surf)
+        handle.render_cairo(ctx)
+        surf.write_to_png(str(png_path))
+        return True
+    except Exception:  # noqa: BLE001 - qualquer falha de binding cai para o próximo conversor
+        pass
+    try:
+        import cairosvg  # type: ignore
+
+        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def write_svg_text(svg: str, out: str | Path) -> list[Path]:
     """Grava um SVG já pronto; com .png, converte via rsvg-convert quando existir."""
     out = Path(out)
@@ -155,9 +198,7 @@ def write_svg_text(svg: str, out: str | Path) -> list[Path]:
         return [out]
     svg_path = out.with_suffix(".svg")
     svg_path.write_text(svg, encoding="utf-8")
-    exe = shutil.which("rsvg-convert")
-    if exe:
-        subprocess.run([exe, "-o", str(out), str(svg_path)], check=True)
+    if svg_to_png(svg_path, out):
         return [svg_path, out]
     return [svg_path]
 
@@ -171,9 +212,7 @@ def write_render(scene: Scene, out: str | Path, width: int = 960) -> list[Path]:
         svg_path = out.with_suffix(".svg")
         svg_path.write_text(svg, encoding="utf-8")
         written.append(svg_path)
-        exe = shutil.which("rsvg-convert")
-        if exe:
-            subprocess.run([exe, "-o", str(out), str(svg_path)], check=True)
+        if svg_to_png(svg_path, out):
             written.append(out)
     else:
         out.write_text(svg, encoding="utf-8")

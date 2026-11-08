@@ -216,13 +216,13 @@ def guide_render(scene, width: int = 1024, labels: bool = False, style: str = "b
 
 
 def _png(svg: str, out: Path) -> None:
-    exe = shutil.which("rsvg-convert")
-    if not exe:
-        raise RuntimeError("rsvg-convert não encontrado: instale librsvg para gerar PNG")
+    from .render import svg_to_png
+
     tmp = out.with_suffix(".tmp.svg")
     tmp.write_text(svg, encoding="utf-8")
     try:
-        subprocess.run([exe, "-o", str(out), str(tmp)], check=True)
+        if not svg_to_png(tmp, out):
+            raise RuntimeError("nenhum conversor SVG→PNG encontrado: instale librsvg (rsvg-convert) ou python3-gi + gir1.2-rsvg-2.0 + pycairo, ou cairosvg")
     finally:
         tmp.unlink(missing_ok=True)
 

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from . import layout as L
 from . import vocab as V
+from . import zones
 from .model import RefError, Scene
 
 ARITY = {
@@ -24,6 +25,7 @@ ARITY = {
     "facing": (2, 2),
     "brightest": (1, 1),
     "focal_single": (0, 0),
+    "clear_zone": (1, 1),
 }
 REF_ARGS = {  # quais argumentos são referências
     "above": (0, 1),
@@ -87,6 +89,9 @@ def check_refs(scene: Scene, a: Assert) -> None:
     """Levanta RefError se algum argumento-referência não resolver."""
     for i in REF_ARGS.get(a.name, ()):
         scene.resolve(a.args[i])
+    if a.name == "clear_zone":
+        if a.args[0] not in zones.zones(scene.data):
+            raise RefError(f"clear_zone({a.args[0]}): nenhuma zona com esse id em safe_zones", accepted=sorted(zones.zones(scene.data)))
     if a.name == "count":
         key = a.args[0]
         known = {e.kind for e in scene.entities} | {t for e in scene.entities for t in e.tags}
@@ -182,6 +187,11 @@ def evaluate(scene: Scene, a: Assert) -> Result:
         focal = scene.focal_target().entity
         ok = len(maxed) == 1 and focal is not None and maxed[0] == focal.id
         return Result(a.raw, ok, f"brilho máximo em: {', '.join(maxed) or '-'}; foco em {focal.id if focal else '-'}")
+
+    if n == "clear_zone":
+        z = zones.zones(scene.data)[a.args[0]]
+        bad = zones.offenders(scene, z)
+        return Result(a.raw, not bad, "zona livre" if not bad else "invadida por " + ", ".join(f"{i} ({f:.0%} da caixa)" for i, f in bad))
 
     return Result(a.raw, False, "predicado sem avaliador")
 

@@ -298,7 +298,7 @@ def sentence(scene, entity_id: str) -> str | None:
     if isinstance(ey, dict):
         bits = ["olhos"]
         if "color" in ey:
-            bits.append(_color_phrase(ey["color"], data))
+            bits.append("de cor " + _color_phrase(ey["color"], data))   # «de cor dourado»: evita a concordância «olhos dourado»
         if "shape" in ey:
             bits.append(EYE_SHAPE[ey["shape"]])
         out.append(_cap(" ".join(bits)) + ".")

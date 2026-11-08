@@ -39,6 +39,17 @@ JOINT_PT = {"neck": "o pescoço", "spine": "a coluna", "shoulder": "o ombro", "e
 SIDE_PT = {"left": "esquerdo", "right": "direito"}
 JOINT_PL = {"shoulder": "os ombros", "elbow": "os cotovelos", "wrist": "os punhos", "hip": "os quadris", "knee": "os joelhos", "ankle": "os tornozelos"}
 _PLURAL = (("dobrado", "dobrados"), ("estendido", "estendidos"), ("afastado", "afastados"), ("girado", "girados"))
+FEMININE_JOINTS = {"spine"}
+
+
+def _fem(phrase: str) -> str:
+    """Primeira palavra (adjetivo/particípio) no feminino: «dobrado para a frente» → «dobrada para a frente»."""
+    head, _, rest = phrase.partition(" ")
+    if head.endswith("o"):
+        head = head[:-1] + "a"
+    return head + (" " + rest if rest else "")
+
+
 # (junta, eixo) -> (frase quando positivo, frase quando negativo)
 AXIS_PT = {
     "flex": ("dobrado para a frente", "estendido para trás"),
@@ -55,7 +66,7 @@ HAND_FOOT = {"left_hand": "a mão esquerda", "right_hand": "a mão direita", "le
 POSE_HEADER = ("Pose (ângulos em graus a partir da posição neutra, esquerda e direita do próprio personagem; "
                "mantenha a anatomia natural): ")
 POSE_HEADER_SHORT = "Pose (graus, neutro 0°, lados do personagem): "
-POSE_KEYS = {"body_yaw", "joints", "hold", "profile"}
+POSE_KEYS = {"body_yaw", "joints", "hold", "profile", "preset"}
 
 
 _PT_JOINT = {"cotovelo": "elbow", "joelho": "knee", "ombro": "shoulder", "quadril": "hip", "pulso": "wrist", "punho": "wrist",
@@ -248,6 +259,8 @@ def _joint_phrase(name: str, axes: dict, limits: dict | None = None) -> str:
             word = HINGE_PT[base]
         else:
             word = pos if deg > 0 else neg
+        if base in FEMININE_JOINTS:
+            word = _fem(word)
         band = _band(deg, *lim[ax])
         bits.append(f"{word} {abs(deg):g}°" + (f" ({band})" if band else ""))
     return f"{label} " + " e ".join(bits) if bits else ""
@@ -307,7 +320,8 @@ def sentence(scene, entity_id: str) -> str | None:
             out.append(ph)
     for k, v in (po.get("hold") or {}).items():
         if k in HAND_FOOT:
-            out.append(f"{HAND_FOOT[k]} segura/toca {v}")
+            ent = scene.by_id.get(v) if isinstance(v, str) else None
+            out.append(f"{HAND_FOOT[k]} segura/toca {ent.label if ent is not None else v}")
     if not out:
         return None
     return POSE_HEADER + "; ".join(out) + "."

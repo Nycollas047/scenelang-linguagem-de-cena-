@@ -36,8 +36,17 @@ class Ctx:
     items: list
 
     def label(self, ref: str) -> str:
+        """Rótulo em português de uma entidade, âncora, região ou ponto da grade (nunca um id cru)."""
         e = self.scene.by_id.get(ref.split(".")[0])
-        return e.label if e else ref
+        if e is not None and "." not in ref:
+            return e.label
+        try:
+            t = self.scene.resolve(ref)
+            if t.kind == "point":
+                return P.point_with_percent(self.scene.grid_kind, t.id)
+            return P.target_phrase(self.scene, ref)
+        except Exception:  # noqa: BLE001 - referência desconhecida: devolve o que há de mais legível
+            return e.label if e else ref
 
     def where(self, ref: str) -> str:
         e = self.scene.by_id.get(ref)
@@ -96,14 +105,14 @@ class PositionRule(Rule):
         a = parse_assert(f.check)
         if len(a.args) < 2:
             return None
-        A, B = (x.split(".")[0] for x in a.args[:2])
+        A, B = a.args[0].split(".")[0], a.args[1]
         txt = f"{P.cap(ctx.label(A))} fica {POSITION_PT[a.name]} {ctx.label(B)}"
         if attempt == 0:
             if a.name in OPPOSITE_PT:
                 txt += f" (antes ficou {OPPOSITE_PT[a.name]})"
             where = ctx.where(A)
             return txt + (f"; posicione {ctx.label(A)} {where}." if where else ".")
-        wa, wb = ctx.where(A), ctx.where(B)
+        wa, wb = ctx.where(A), ctx.where(B.split(".")[0])
         return txt + (f": {ctx.label(A)} {wa}, {ctx.label(B)} {wb}." if wa and wb else ", com os dois bem separados no quadro.")
 
 
@@ -119,6 +128,41 @@ class VisibleRule(Rule):
         if attempt == 0:
             return f"{P.cap(who)} aparece inteiro dentro do quadro, sem cortes nas bordas."
         return f"{P.cap(who)} aparece completo, com folga visível entre ele e cada borda do quadro."
+
+
+@register
+class ClearZoneRule(Rule):
+    name, kind, priority, checks = "zona_livre", "layout", 22, ("clear_zone",)
+    side_effects = ("tira elementos do canto: a composição pode se deslocar",)
+
+    def build(self, ctx, f, attempt):
+        from .. import zones
+
+        a = parse_assert(f.check)
+        zone = zones.zones(ctx.scene.data).get(a.args[0]) if a.args else None
+        if zone is None:
+            return None
+        base = zones.phrase(ctx.scene, zone)
+        if attempt == 0:
+            return base
+        return base + " Deixe só fundo liso e escuro nessa área, com os elementos recuados para longe dela."
+
+
+@register
+class ZoneQuietRule(Rule):
+    name, kind, priority, checks = "zona_quieta", "verify", 43, ("zone_quiet",)
+
+    def build(self, ctx, f, attempt):
+        from .. import zones
+
+        zid = _args(f.check)[0]
+        zone = zones.zones(ctx.scene.data).get(zid)
+        if zone is None:
+            return None
+        purpose = f" ({zone['purpose']})" if zone.get("purpose") else ""
+        if attempt == 0:
+            return f"A zona {zid}{purpose} é uma área lisa, de luminância uniforme, sem textura, detalhe nem ruído."
+        return f"Preencha a zona {zid}{purpose} com uma cor quase chapada e sem contraste interno: nenhuma linha, mancha nem brilho dentro dela."
 
 
 # -- pixel art / paleta -------------------------------------------------------------------------------------
