@@ -1,6 +1,7 @@
 """Funções JSON-serializáveis para uso por modelos (ferramenta/MCP) sem tocar na linha de comando."""
 from __future__ import annotations
 
+from pathlib import Path
 import yaml
 
 from . import compile as CP
@@ -42,14 +43,24 @@ def fix(text: str) -> dict:
     return {"text": out, "applied": applied, **_result(diags2, scene2, [])}
 
 
-def compile_scene(text: str, target: str = "prose", size: str | None = None) -> dict:
+def compile_scene(text: str, target: str = "prose", size: str | None = None, token_budget: int | None = None) -> dict:
     diags, scene, _ = load_text(text)
     if scene is None:
         return {"ok": False, "errors": [d.to_dict() for d in diags if d.level == "error"]}
     if target not in CP.BACKENDS:
         return {"ok": False, "errors": [{"message": f"target desconhecido: {target}", "accepted": sorted(CP.BACKENDS)}]}
+    warnings = [d.to_dict() for d in diags if d.level == "warning"]
+    if token_budget:
+        if target not in ("prose", "compact"):
+            return {"ok": False, "errors": [{"message": "token_budget só vale para prose e compact"}]}
+        from . import loss as LS
+
+        res = CP.compile_budget(scene, target, int(token_budget))
+        return {"ok": True, "target": target, "output": res["text"], "warnings": warnings,
+                "budget": {k: res[k] for k in ("budget", "tokens", "method", "fits", "dropped")},
+                "budget_loss": [str(x) for x in LS.budget_losses(res["dropped"], res["budget"], res["fits"])]}
     out = CP.to_regions(scene, size) if target == "regions" else CP.BACKENDS[target](scene)
-    return {"ok": True, "target": target, "output": out, "warnings": [d.to_dict() for d in diags if d.level == "warning"]}
+    return {"ok": True, "target": target, "output": out, "warnings": warnings}
 
 
 def plan(text: str) -> dict:
@@ -104,13 +115,33 @@ def check_layout(text: str) -> dict:
     return {"ok": all(r.ok for r in res), "asserts": [{"assert": r.raw, "ok": r.ok, "detail": r.detail} for r in res]}
 
 
-def render_schema(text: str, out_dir: str, width: int = 960) -> dict:
+def render_schema(text: str, out_dir: str, width: int = 960, style: str = "schematic") -> dict:
     from .render import write_render
 
     scene, err = _scene(text)
     if err:
         return err
-    return {"ok": True, "files": [str(p) for p in write_render(scene, out_dir, width)]}
+    try:
+        return {"ok": True, "files": [str(p) for p in write_render(scene, out_dir, width, style)]}
+    except ValueError as e:
+        return {"ok": False, "errors": [{"message": str(e)}]}
+
+
+def level_export(text: str, target: str, out_path: str | None = None) -> dict:
+    """Exporta a planta/grafo: mermaid | tiled | godot | unity. Com `out_path`, grava o arquivo."""
+    from . import level_export as LE
+
+    scene, err = _scene(text)
+    if err:
+        return err
+    try:
+        out = LE.export(scene, target)
+    except LE.ExportError as e:
+        return {"ok": False, "errors": [{"message": str(e), "accepted": list(LE.TARGETS)}]}
+    if out_path:
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_text(out, encoding="utf-8")
+    return {"ok": True, "target": target, "output": out if not out_path else None, "file": out_path}
 
 
 def pack_files(text: str, out_dir: str, only: str | None = None, guide_style: str = "blocks", width: int = 1024) -> dict:

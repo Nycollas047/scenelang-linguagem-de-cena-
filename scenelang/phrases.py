@@ -175,6 +175,25 @@ def assert_texts(scene, a) -> tuple[str, str]:
             f"{cap(tp(0))} é o elemento mais brilhante e mais saturado da imagem.",
             f"{cap(tp(0))} é o elemento mais brilhante e mais saturado da imagem?",
         )
+    if n in ("line_of_sight", "occluded"):
+        if n == "line_of_sight":
+            t = f"Há linha de visão livre entre {tp(0)} e {tp(1)}: nada entra entre eles."
+        elif len(args) == 3:
+            t = f"{cap(tp(2))} fica entre {tp(0)} e {tp(1)} e bloqueia a visão de um para o outro."
+        else:
+            t = f"{cap(tp(0))} fica protegido da visão de {tp(1)} por um elemento sólido entre eles."
+        return (t, t.rstrip(".") + "?")
+    if n == "no_overlap":
+        t = f"Nenhum elemento de «{args[0]}» se sobrepõe a elementos de «{args[1]}»."
+        return (t, t.rstrip(".") + "?")
+    if n == "clearance":
+        t = f"Entre {tp(0)} e {tp(1)} sobra passagem livre de pelo menos {float(args[2]) * 100:.0f}% da altura do quadro."
+        return (t, t.rstrip(".") + "?")
+    if n in ("connected", "reachable", "no_softlock", "min_paths"):
+        t = {"connected": f"{cap(tp(0))} liga-se diretamente a {tp(1)}.", "reachable": f"É possível chegar de {tp(0)} a {tp(1)}.",
+             "no_softlock": f"É possível chegar de {tp(0)} a {tp(1)} sem ficar preso.",
+             "min_paths": f"Existem {OP_WORD[a.op]} {a.num} caminhos independentes entre {tp(0)} e {tp(1)}."}[n]
+        return (t, t.rstrip(".") + "?")
     if n == "clear_zone":
         from . import zones
 

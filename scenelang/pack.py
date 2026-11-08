@@ -11,8 +11,6 @@ from __future__ import annotations
 import colorsys
 import hashlib
 import json
-import shutil
-import subprocess
 from html import escape
 from pathlib import Path
 

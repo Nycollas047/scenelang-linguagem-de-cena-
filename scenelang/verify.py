@@ -22,9 +22,9 @@ from . import fx, guides
 from . import palette as PAL
 from .checks import is_num, suggest
 
-NAMES = ("max_colors", "grid_aligned", "symmetric", "fit_guides", "palette_match", "chroma_clean", "no_spill", "margin", "zone_quiet")
+NAMES = ("max_colors", "grid_aligned", "symmetric", "fit_guides", "palette_match", "chroma_clean", "no_spill", "margin", "zone_quiet", "walkable_connected")
 ARITY = {"max_colors": (1, 1), "grid_aligned": (0, 2), "symmetric": (1, 3), "fit_guides": (0, 1),
-         "palette_match": (1, 3), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1), "zone_quiet": (1, 2)}
+         "palette_match": (1, 3), "chroma_clean": (0, 0), "no_spill": (0, 0), "margin": (1, 1), "zone_quiet": (1, 2), "walkable_connected": (2, 3)}
 CALL = re.compile(r"^\s*([a-z_]+)\s*\((.*)\)\s*$")
 
 
@@ -75,7 +75,11 @@ def parse(raw: str) -> Check:
         if not isinstance(ent, str):
             raise VerifySyntaxError("o terceiro argumento de palette_match é o id de uma entidade: palette_match(10, 0.9, pirate)")
         args.append(ent)
-    if name == "zone_quiet":
+    if name == "walkable_connected":
+        if not all(isinstance(x, str) and not is_num(x) for x in args[:2]):
+            raise VerifySyntaxError("walkable_connected(origem, destino[, tolerância]): origem e destino são ids de entidades")
+        nums = args[2:]
+    elif name == "zone_quiet":
         if not isinstance(args[0], str) or is_num(args[0]):
             raise VerifySyntaxError("o primeiro argumento de zone_quiet é o id de uma zona: zone_quiet(title_area, 0.08)")
         nums = args[1:]
@@ -113,6 +117,11 @@ def check(c, data: dict) -> None:
             c.error(p, "fit_guides exige a camada guides", got=raw)
         if ck.name in ("chroma_clean", "no_spill") and bg.get("mode") != "chromakey":
             c.error(p, f"{ck.name} exige background.mode: chromakey", got=raw)
+        if ck.name == "walkable_connected":
+            ids = [e.get("id") for e in data.get("entities") or [] if isinstance(e, dict)]
+            for a in ck.args[:2]:
+                if a not in ids:
+                    c.error(p, f"entidade desconhecida em walkable_connected: {a!r}", got=raw, accepted=ids)
         if ck.name == "zone_quiet" and ck.args[0] not in {z.get("id") for z in data.get("safe_zones") or [] if isinstance(z, dict)}:
             c.error(p, f"zona desconhecida em zone_quiet: {ck.args[0]!r}", got=raw,
                     accepted=[z.get("id") for z in data.get("safe_zones") or [] if isinstance(z, dict)])
@@ -341,7 +350,58 @@ def v_zone_quiet(f: Frame, a: list) -> Result:
     return Result(raw, std <= limit, f"desvio da luminância {std:.3f} (limite {limit:g}) em {lum.size} px", std)
 
 
-FUNCS = {"zone_quiet": v_zone_quiet, "max_colors": v_max_colors, "grid_aligned": v_grid_aligned, "symmetric": v_symmetric, "fit_guides": v_fit_guides,
+WALKABLE_DE = 18.0      # ΔE (Lab) até o qual um pixel conta como «o mesmo piso» do ponto de partida/chegada
+
+
+def v_walkable_connected(f: Frame, a: list) -> Result:
+    """O piso caminhável liga a origem ao destino na imagem pronta?
+
+    Piso = pixels a ΔE ≤ tolerância da cor mediana (Lab) dentro das caixas de origem e destino — o mapa não declara a cor do
+    piso, então ela é lida onde o projeto diz que o jogador está/chega. A máscara é erodida por `flow.player_radius` (um
+    gargalo mais estreito que o jogador não conta) e os componentes conexos são comparados. Falha também quando uma das
+    caixas quase não tem piso (medição inconclusiva é reprovada, não aprovada)."""
+    np, _ = _np()
+    from scipy import ndimage as ndi
+
+    src, dst = a[0], a[1]
+    tol = float(a[2]) if len(a) > 2 else WALKABLE_DE
+    raw = f"walkable_connected({src}, {dst}" + (f", {a[2]:g}" if len(a) > 2 else "") + ")"
+    ents = f.scene.by_id
+    if src not in ents or dst not in ents:
+        return Result(raw, False, "entidade inexistente")
+
+    def crop(e):
+        x, y, w, h = e.box
+        x0, y0 = max(0, int(x * f.W)), max(0, int(y * f.H))
+        x1, y1 = min(f.W, max(x0 + 1, int((x + w) * f.W))), min(f.H, max(y0 + 1, int((y + h) * f.H)))
+        return x0, y0, x1, y1
+
+    refs = []
+    for e in (ents[src], ents[dst]):
+        x0, y0, x1, y1 = crop(e)
+        refs.append(np.median(f.lab[y0:y1, x0:x1].reshape(-1, 3), axis=0))
+    de = np.minimum(*[np.linalg.norm(f.lab - r, axis=-1) for r in refs])
+    mask = de <= tol
+    rad = (f.scene.data.get("flow") or {}).get("player_radius")
+    if isinstance(rad, (int, float)) and rad > 0:
+        r = max(1, int(round(rad * f.H)))
+        yy, xx = np.ogrid[-r:r + 1, -r:r + 1]
+        mask = ndi.binary_erosion(mask, structure=(xx * xx + yy * yy) <= r * r)
+    labels, _n = ndi.label(mask)
+    sets, cover = [], []
+    for e in (ents[src], ents[dst]):
+        x0, y0, x1, y1 = crop(e)
+        sub = labels[y0:y1, x0:x1]
+        cover.append(float((sub > 0).mean()) if sub.size else 0.0)
+        sets.append(set(np.unique(sub[sub > 0]).tolist()))
+    if min(cover) < 0.05:
+        who = src if cover[0] < 0.05 else dst
+        return Result(raw, False, f"quase nenhum piso caminhável dentro de {who} ({min(cover):.1%}): medição inconclusiva", min(cover))
+    shared = sets[0] & sets[1]
+    return Result(raw, bool(shared), f"piso {'conectado' if shared else 'NÃO conectado'} entre {src} ({cover[0]:.0%} de piso) e {dst} ({cover[1]:.0%} de piso)", float(bool(shared)))
+
+
+FUNCS = {"walkable_connected": v_walkable_connected, "zone_quiet": v_zone_quiet, "max_colors": v_max_colors, "grid_aligned": v_grid_aligned, "symmetric": v_symmetric, "fit_guides": v_fit_guides,
          "palette_match": v_palette_match, "chroma_clean": v_chroma_clean, "no_spill": v_no_spill, "margin": v_margin}
 
 

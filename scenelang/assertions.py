@@ -26,7 +26,16 @@ ARITY = {
     "brightest": (1, 1),
     "focal_single": (0, 0),
     "clear_zone": (1, 1),
+    "line_of_sight": (2, 2),
+    "occluded": (2, 3),
+    "no_overlap": (2, 2),
+    "clearance": (3, 3),
+    "connected": (2, 2),
+    "reachable": (2, 2),
+    "no_softlock": (2, 2),
+    "min_paths": (2, 2),
 }
+GRAPH_PREDICATES = ("connected", "reachable", "no_softlock", "min_paths")
 REF_ARGS = {  # quais argumentos são referências
     "above": (0, 1),
     "below": (0, 1),
@@ -37,6 +46,13 @@ REF_ARGS = {  # quais argumentos são referências
     "visible": (0,),
     "facing": (0,),
     "brightest": (0,),
+    "line_of_sight": (0, 1),
+    "occluded": (0, 1, 2),
+    "clearance": (0, 1),
+    "connected": (0, 1),
+    "reachable": (0, 1),
+    "no_softlock": (0, 1),
+    "min_paths": (0, 1),
 }
 NEAR_DEFAULT_TOL = 0.06
 
@@ -71,12 +87,18 @@ def parse_assert(raw: str) -> Assert:
         raise AssertSyntaxError(
             f"{name} espera {lo if lo == hi else f'{lo} a {hi}'} argumento(s), recebeu {len(args)}"
         )
-    if name == "count" and op is None:
-        raise AssertSyntaxError("count exige comparação, por exemplo: count(ally) == 2")
-    if name != "count" and op is not None:
+    if name in ("count", "min_paths") and op is None:
+        raise AssertSyntaxError(f"{name} exige comparação, por exemplo: " + ("count(ally) == 2" if name == "count" else "min_paths(a, b) >= 2"))
+    if name not in ("count", "min_paths") and op is not None:
         raise AssertSyntaxError(f"{name} não aceita comparação numérica")
     if name == "facing" and args[1] not in V.DIRECTIONS:
         raise AssertSyntaxError(f"direção desconhecida: {args[1]!r}")
+    if name == "clearance":
+        try:
+            if float(args[2]) < 0:
+                raise ValueError
+        except ValueError:
+            raise AssertSyntaxError(f"distância mínima inválida: {args[2]!r} (use um número ≥ 0, em alturas do quadro)") from None
     if name == "near" and len(args) == 3:
         try:
             float(args[2])
@@ -85,10 +107,32 @@ def parse_assert(raw: str) -> Assert:
     return Assert(str(raw), name, args, op, int(num) if num is not None else None)
 
 
+def group(scene: Scene, key: str) -> list:
+    """Entidades de um grupo: o id de uma entidade, ou uma etiqueta/tipo (`cover`, `door`, `prop`)."""
+    if key in scene.by_id:
+        return [scene.by_id[key]]
+    return [e for e in scene.entities if e.kind == key or key in e.tags]
+
+
 def check_refs(scene: Scene, a: Assert) -> None:
     """Levanta RefError se algum argumento-referência não resolver."""
     for i in REF_ARGS.get(a.name, ()):
+        if a.name == "clearance" and i == 2:
+            continue
         scene.resolve(a.args[i])
+    if a.name == "no_overlap":
+        for key in a.args:
+            if not group(scene, key):
+                known = sorted(set(scene.by_id) | {e.kind for e in scene.entities} | {t for e in scene.entities for t in e.tags})
+                raise RefError(f"no_overlap({key}): nem entidade, nem tipo, nem etiqueta com esse nome", accepted=known)
+    if a.name in GRAPH_PREDICATES:
+        from . import topology
+
+        if not topology.edges(scene.data):
+            raise RefError(f"{a.name} exige a seção `graph` com arestas")
+        for arg in a.args[:2]:
+            if topology.node_of(scene, arg.split(".")[0]) is None:
+                raise RefError(f"{arg!r} não é um nó do grafo nem está dentro de um", accepted=topology.node_ids(scene.data))
     if a.name == "clear_zone":
         if a.args[0] not in zones.zones(scene.data):
             raise RefError(f"clear_zone({a.args[0]}): nenhuma zona com esse id em safe_zones", accepted=sorted(zones.zones(scene.data)))
@@ -192,6 +236,53 @@ def evaluate(scene: Scene, a: Assert) -> Result:
         z = zones.zones(scene.data)[a.args[0]]
         bad = zones.offenders(scene, z)
         return Result(a.raw, not bad, "zona livre" if not bad else "invadida por " + ", ".join(f"{i} ({f:.0%} da caixa)" for i, f in bad))
+
+    if n in ("line_of_sight", "occluded"):
+        pa, pb = scene.resolve(a.args[0]), scene.resolve(a.args[1])
+        skip = {a.args[0].split(".")[0], a.args[1].split(".")[0]}
+        blockers = [e for e in scene.entities if e.id not in skip and set(e.tags) & set(V.SIGHT_BLOCKER_TAGS)]
+        hit = [e.id for e in blockers if L.segment_intersects_box(pa.point, pb.point, e.box)]
+        if n == "line_of_sight":
+            return Result(a.raw, not hit, "nada bloqueia a linha" if not hit else "bloqueada por " + ", ".join(hit))
+        if len(a.args) == 3:
+            bl = a.args[2].split(".")[0]
+            hit_b = bl in [e.id for e in blockers if L.segment_intersects_box(pa.point, pb.point, e.box)]
+            return Result(a.raw, hit_b, f"{bl} intercepta a linha" if hit_b else f"{bl} não intercepta a linha" + (f" (bloqueia: {', '.join(hit)})" if hit else " (a linha está livre)"))
+        return Result(a.raw, bool(hit), "protegida por " + ", ".join(hit) if hit else "a linha de visão está livre")
+
+    if n == "no_overlap":
+        ga, gb = group(scene, a.args[0]), group(scene, a.args[1])
+        seen, bad = set(), []
+        for x in ga:
+            for y in gb:
+                key = tuple(sorted((x.id, y.id)))
+                if x is not y and key not in seen:
+                    seen.add(key)
+                    if L.boxes_overlap(x.box, y.box):
+                        bad.append(f"{x.id}×{y.id}")
+        return Result(a.raw, not bad, f"{len(seen)} par(es) sem sobreposição" if not bad else "sobrepõem: " + ", ".join(bad))
+
+    if n == "clearance":
+        ta, tb = scene.resolve(a.args[0]), scene.resolve(a.args[1])
+        if ta.box is None or tb.box is None:
+            return Result(a.raw, False, "o alvo não tem caixa")
+        need = float(a.args[2])
+        d = L.box_clearance(ta.box, tb.box, scene.ratio)
+        return Result(a.raw, d >= need - 1e-9, f"folga {d:.3f} (mínimo {need:g}, em alturas do quadro)")
+
+    if n in GRAPH_PREDICATES:
+        from . import topology
+
+        if n == "connected":
+            ok, why = topology.connected(scene, *a.args)
+        elif n == "reachable":
+            ok, why = topology.reachable(scene, *a.args)
+        elif n == "no_softlock":
+            ok, why = topology.no_softlock(scene, *a.args)
+        else:
+            k, why = topology.max_paths(scene, *a.args)
+            ok = _cmp(a.op, k, a.num)
+        return Result(a.raw, ok, why)
 
     return Result(a.raw, False, "predicado sem avaliador")
 

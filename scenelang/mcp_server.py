@@ -55,9 +55,9 @@ def build():
         return _j(api.fix(scene_yaml) if fix else api.validate(scene_yaml))
 
     @mcp.tool()
-    def scenelang_compile(scene_yaml: str, target: str = "prose", size: str = "") -> str:
-        """Compila a cena em prompt. target: prose (texto para qualquer gerador) | json | regions (prompt por regiões). Devolve também o que o backend perde."""
-        res = api.compile_scene(scene_yaml, target, size or None)
+    def scenelang_compile(scene_yaml: str, target: str = "prose", size: str = "", token_budget: int = 0) -> str:
+        """Compila a cena em prompt. target: prose (texto para qualquer gerador) | compact | json | regions (prompt por regiões). Com token_budget>0 (só prose/compact) poda por prioridade até caber e lista o que saiu. Devolve também o que o backend perde."""
+        res = api.compile_scene(scene_yaml, target, size or None, token_budget or None)
         if res.get("ok"):
             res["loss"] = api.loss_report(scene_yaml, target).get("items", [])
         return _j(res)
@@ -68,9 +68,14 @@ def build():
         return _j(api.check_layout(scene_yaml))
 
     @mcp.tool()
-    def scenelang_render_schema(scene_yaml: str, out_dir: str = DEFAULT_OUT, width: int = 960) -> str:
-        """Desenha o esquema 2D da cena (SVG/PNG) para conferir a composição antes de gerar a imagem."""
-        return _j(api.render_schema(scene_yaml, out_dir, width))
+    def scenelang_render_schema(scene_yaml: str, out_dir: str = DEFAULT_OUT, width: int = 960, style: str = "schematic") -> str:
+        """Desenha o esquema 2D da cena (SVG/PNG) para conferir a composição antes de gerar a imagem. style: schematic | floorplan (planta baixa com portas, coberturas, escala e grafo)."""
+        return _j(api.render_schema(scene_yaml, out_dir, width, style))
+
+    @mcp.tool()
+    def scenelang_level_export(scene_yaml: str, target: str, out_path: str = "") -> str:
+        """Exporta a planta/grafo de level design: mermaid (diagrama do grafo) | tiled (JSON do Tiled) | godot (.tscn com CSGBox3D) | unity (JSON de blocos). Cenas com `graph`, `flow` e tags (room, door, cover…)."""
+        return _j(api.level_export(scene_yaml, target, out_path or None))
 
     @mcp.tool()
     def scenelang_pose_sheet(scene_yaml: str, entity: str, out_path: str = f"{DEFAULT_OUT}/pose.svg", style: str = "mannequin") -> str:

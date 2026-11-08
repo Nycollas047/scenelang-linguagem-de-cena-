@@ -43,6 +43,8 @@ _fate("preserved", "vira texto do prompt", "canvas", "grid", "style", "intent", 
       "background", "materials", "detail", "lock", "corrections", "priority_boost", "colors", "entities")
 _fate("preserved", "vira frase ativa no prompt (bloco INTERAÇÕES)", "interactions")
 _fate("preserved", "a zona vira frase de prioridade e assert `clear_zone`; a imagem pronta é medida por `zone_quiet`", "safe_zones")
+_fate("preserved", "a topologia vira frases (bloco TOPOLOGIA); os predicados de grafo são conferidos na planta, não na imagem", "graph")
+_fate("preserved", "as rotas e os cones viram frases (bloco FLUXO); o traçado exato só existe no esquema (`render`)", "flow")
 _fate("meta", "atalho expandido em `asserts` antes de compilar: o que chega ao prompt são os asserts gerados", "auto_asserts")
 _fate("approx", "linhas-guia viram frases; a geometria exata não chega", "guides")
 _fate("approx", "pedidos negativos viram afirmações equivalentes; a forma original não chega", "avoid")
@@ -138,7 +140,7 @@ def _fates(d: dict, backend: str) -> list[Loss]:
 def budget_losses(dropped: list[str], budget: int, fits: bool) -> list[Loss]:
     """Perdas causadas por `compile --token-budget`: cada degrau podado vira uma linha `lost`."""
     names = {"detalhe_de_textura": "detalhe de textura", "ordem_do_olhar": "ordem do olhar", "lembrete_final": "lembrete final",
-             "detalhes": "detalhes globais", "iluminacao": "iluminação", "atmosfera": "atmosfera", "intencao": "intenção",
+             "detalhes": "detalhes globais", "fluxo": "rotas e cones de fluxo", "topologia": "frases de topologia", "iluminacao": "iluminação", "atmosfera": "atmosfera", "intencao": "intenção",
              "paleta": "paleta", "prioridades": "prioridades além das essenciais", "entity:wind": "vento das entidades não focais",
              "entity:details": "detalhes das entidades não focais", "entity:material": "materiais das entidades não focais",
              "entity:pose": "pose das entidades não focais", "entity:character": "ficha de personagem das entidades não focais"}

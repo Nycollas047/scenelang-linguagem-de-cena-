@@ -212,3 +212,31 @@ Corrigido na v0.7: o manequim tinha os sinais da flexão (ombro, quadril, cotove
 `bench plan` grava os prompts dos cinco modos (convencional, completa, compacta, incremental, com_guia) e as métricas offline; `bench record` registra cada geração
 (tokens de saída, chamadas, tentativas, custo; com imagem, mede as restrições em código, só medições de confiança ≥ 0,6); `bench report` agrega.
 Não chama nenhum gerador; o que não foi medido aparece como «—». Sem `--baseline` o modo convencional é uma linearização **sintética**, marcada como tal.
+
+## Sintaxe v0.8 (açúcar expandido em `scenelang/expand.py`)
+
+Aplicado em `load_text`, antes de validar; o YAML do autor não muda. Cada expansão gera uma nota; erro vira diagnóstico.
+
+| Chave | O que faz |
+|---|---|
+| `entities[].at` (mapa) + `size` | Posição relativa: `anchor`, `of` (+`offset: [dx, dy]`), `right_of`/`left_of`/`above`/`below` (+`gap`, `align_x`, `align_y`). Vira `box` e acrescenta o assert topológico que a posição implica. Dependência circular é erro. |
+| `auto_asserts: [horizontal_order, vertical_order]` | Sintetiza `left_of`/`above` em cadeia entre entidades de primeiro plano e plano médio, só onde os centros distam ≥ 0,08; não duplica asserts já escritos (nem os invertidos). |
+| `interactions: [{from, verb, to}]` | Frase ativa por interação (`mage.right_hand`, `serpent.head` aceitam parte). Avisa se `orient` aponta para o lado oposto do alvo (verbos de encarar/atacar). |
+| `safe_zones: [{id, box, rule, purpose}]` | Zona livre (`background_only` ou `empty`). Vira `clear_zone(id)`, retângulo no esquema e, na imagem, `verify: zone_quiet(id[, max_std])`. |
+| `pose.preset` + `joints` | Pose-base (`idle walk run crouch sit kneel bow strike_overhead blacksmith_strike cast_forward guard reach_up`); `joints` sobrescreve eixo a eixo. |
+| `compile --token-budget N` | Só `prose`/`compact`. Poda do que menos pesa para o que mais pesa e declara cada corte como perda. O essencial nunca sai; se não couber, diz que não coube. |
+
+Correções do relatório de campo: ids de ponto da grade (`pt_ul`) não vazam mais no texto de correção; na grade áurea um centro a ≤ 0,06 de um ponto é descrito pelo ponto; `pose.hold` usa o rótulo da entidade; concordância (`a coluna dobrada`, `pedra áspera`, `olhos de cor dourado`); `bench plan` guarda `cena.yaml` e `bench record` a usa; `verify` sem `verify:` não exige numpy; `svg_to_png` tem fallback (rsvg-convert → gi/cairo → cairosvg).
+
+## Level design (v0.9)
+
+Pensado para mapas, interiores e blockout; a cena é a planta (caixas normalizadas + `canvas.pixel_grid` como unidade de célula).
+
+- **Predicados** (`asserts`): `line_of_sight(a, b)`, `occluded(a, b[, bloqueador])`, `no_overlap(a, b)` (ids, tipos ou etiquetas), `clearance(a, b, min)` (borda a borda, em alturas do quadro), `connected`, `reachable`, `no_softlock(spawn, goal)`, `min_paths(a, b) >= n`. Bloqueiam a visão as entidades com etiqueta `los_blocker`, `full_cover` ou `wall`.
+- **`graph:`** (`spawn`, `goal`, `nodes[{id, role}]`, `edges[{from, to, via, kind, unlocked_by}]`). `kind`: bidirectional, one_way, locked, destructible, hazard. `reachable` e `min_paths` tratam trancada como passável; `no_softlock` só passa depois de coletar a chave, e diz qual porta prendeu o jogador. Predicados de grafo são conferidos na planta e **não** vão para o prompt; o grafo vai como bloco TOPOLOGIA.
+- **`flow:`** `player_radius`, `routes{nome: {label, style, points}}`, `sight_cones[{source, angle_deg, range}]` (abre a partir de `orient`). Bloco FLUXO no prompt; traçado exato só no esquema.
+- **`guides.metrics`**: `cell_size`, `door_width_cells`, `corridor_min_cells`, `cover_min_cells`; aviso com `fix` (caixa já corrigida, arredondada para cima).
+- **`scenelang render --style floorplan`**: paredes duplas, porta com arco e cadeado, hachura de cobertura, perigo, rotas, cones, linhas de visão, escala em metros e mini diagrama do grafo.
+- **`verify: walkable_connected(origem, destino[, ΔE])`**: o piso (cor lida nas caixas de origem e destino) liga os dois na imagem pronta? Erosão por `flow.player_radius`; piso quase ausente nas caixas = reprovado (inconclusivo não aprova). Regra de correção própria.
+- **`scenelang level CENA --export mermaid|tiled|godot|unity`**: Mermaid e JSONs (Tiled, Unity) são conferidos por testes; o `.tscn` do Godot **não foi aberto no Godot**. LDtk não é suportado (erro explícito). Alturas 3D por etiqueta/plano são convenção de blockout.
+- Exemplo completo: `examples/interior_santuario_level.yaml`.

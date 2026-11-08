@@ -140,7 +140,19 @@ PREDICATES = (
     "brightest",
     "focal_single",
     "clear_zone",
+    "line_of_sight",
+    "occluded",
+    "no_overlap",
+    "clearance",
+    "connected",
+    "reachable",
+    "no_softlock",
+    "min_paths",
 )
+# Predicados de projeto (level design): só têm sentido sobre a planta/grafo, não descrevem nada para o gerador de imagem.
+DESIGN_ONLY_PREDICATES = ("connected", "reachable", "no_softlock", "min_paths")
+# Etiquetas que fazem uma entidade bloquear a linha de visão.
+SIGHT_BLOCKER_TAGS = ("los_blocker", "full_cover", "wall")
 
 REJECTION_TAGS = ("direção", "luz", "proporção", "estilo", "anatomia", "enquadramento")
 

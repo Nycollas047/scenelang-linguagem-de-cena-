@@ -56,3 +56,10 @@ Sem o servidor MCP, use a CLI equivalente: `scenelang validate|compile|pack|loca
 - Espelhamento é variação do gerador, não erro da cena: reporte, não "corrija" a cena.
 - Elementos extras que o gerador acrescenta: declare-os na cena se quiser mantê-los, ou diga que são indesejados.
 - Se uma medição reprovar mas a imagem claramente está certa, o erro é da medição: diga isso ao usuário em vez de reescrever a cena.
+
+## Atalhos e level design (v0.8–0.9)
+- Em vez de calcular `box`, use `at: {right_of: mage, gap: 0.02}` + `size` (ou `anchor`/`of`); o compilador deriva a caixa e o assert.
+- `auto_asserts: [horizontal_order]` evita escrever todo `left_of` à mão; `interactions` diz COMO duas entidades se relacionam; `safe_zones` reserva espaço para título/logo.
+- `pose: {preset: blacksmith_strike, joints: {neck: {turn: -25}}}`: parta de um preset e ajuste só o que difere.
+- Prompt curto: `scenelang_compile` com `token_budget` poda por prioridade e lista o que saiu.
+- Mapas/interiores: `graph`, `flow`, `guides.metrics` e os predicados `line_of_sight`, `occluded`, `clearance`, `reachable`, `no_softlock`, `min_paths`. Confira com `scenelang_render_schema(style="floorplan")` e exporte com `scenelang_level_export`. Na imagem pronta: `verify: walkable_connected(a, b)`.

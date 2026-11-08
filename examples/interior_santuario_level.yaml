@@ -1,0 +1,268 @@
+scene: "Level Design - Interior do Santuário Subterrâneo (Bloco Tático)"
+version: 1
+
+# Grade métrica: 16:9 com pixel_grid de 64 células na largura (1 célula = 0.5m)
+canvas: {shape: rect, ratio: "16:9", pixel_grid: 64}
+grid: {kind: thirds}
+
+style:
+  base: "planta baixa tática top-down de level design, interior de masmorra em pedra e bronze, iluminação dramática de gameplay"
+  mix:
+    "battlemap top-down ortográfico de RPG tático": 70
+    "renderização arquitetônica de jogo estilizada": 30
+
+intent:
+  emotion: "tensão tática com progressão clara da entrada à esquerda até o altar à direita"
+  story: "invasores entraram pelo átrio oeste, usaram os pilares caídos como cobertura contra a besta automática e abriram a grade lateral para flanquear o altar do relicário"
+  focal: altar_relicario
+
+camera:
+  angle: top
+  lens: normal
+  focus: [altar_relicario, ponte_central, mecanismo_grade]
+  depth_blur: "leve escurecimento no abismo inferior para destacar as passarelas caminháveis"
+
+palette:
+  dominant: [cinza-ardósia, azul-abissal, bronze-antigo]
+  accent: ciano-arcano
+  accent_use: "apenas no altar do relicário (objetivo principal) e no fio condutor até o mecanismo da grade"
+  notes: ["coberturas seguras têm tom de pedra clara; zonas de perigo têm brasa avermelhada"]
+
+atmosphere:
+  mood: {name: tense, level: high}
+  weather: clear
+  wind: {direction: right, strength: low}
+
+guides:
+  mode: fixed
+  subject: abismo_subterraneo
+  margin: 2
+  metrics: {unit: meter, cell_size: 0.5, door_width_cells: 3, corridor_min_cells: 4, cover_min_cells: 2}
+
+lights:
+  - role: key
+    color: "ciano-arcano intenso"
+    source: altar_relicario
+    hits: [sala_altar, ponte_central]
+    note: "luz de landmark principal (weenie) atraindo o jogador para o leste"
+  - role: fill
+    color: "laranja de tocha suave"
+    source: atrio_entrada
+    hits: [cover_pilar_oeste, porta_entrada]
+  - role: rim
+    color: "ciano suave de circuito mágico"
+    source: mecanismo_grade
+    hits: [corredor_flanco_norte]
+    note: "breadcrumb luminoso indicando a rota secundária de flanqueamento"
+
+entities:
+  # --- CAMADA DE FUNDO (PISO BASE E ABISMO) ---
+  - id: abismo_subterraneo
+    kind: terrain
+    label: "o abismo subterrâneo"
+    desc: "fosso escuro profundo que separa o átrio oeste da câmara do altar a leste, exigindo cruzar a ponte ou o corredor norte"
+    plane: background
+    box: [0.06, 0.08, 0.88, 0.84]
+    brightness: low
+    saturation: muted
+    tags: [hazard, pit]
+
+  # --- NÓS DO GRAFO (SALAS / ZONAS DE GAMEPLAY) ---
+  - id: atrio_entrada
+    kind: structure
+    label: "o átrio de entrada (Zona Segura / Spawn)"
+    desc: "sala retangular de pedra a oeste com piso de lajes intactas, servindo de zona inicial segura e leitura da arena"
+    plane: background
+    box: [0.06, 0.25, 0.24, 0.55]
+    tags: [node, room, safe_zone]
+
+  - id: corredor_flanco_norte
+    kind: structure
+    label: "a galeria de flanqueamento norte"
+    desc: "corredor estreito em L pelo norte com piso de madeira e pedra que contorna a linha de tiro da ponte central"
+    plane: background
+    box: [0.28, 0.08, 0.42, 0.14]
+    tags: [node, corridor, flank_route]
+
+  - id: sala_altar
+    kind: structure
+    label: "a câmara do relicário (Arena Principal)"
+    desc: "ampla câmara octogonal a leste com piso de mármore gravado e escadaria curta levando ao pedestal central"
+    plane: background
+    box: [0.58, 0.22, 0.34, 0.64]
+    tags: [node, room, arena]
+
+  # --- ARESTAS DO GRAFO (PORTAS, PONTES E CONEXÕES) ---
+  - id: porta_entrada
+    kind: structure
+    label: "o portão de entrada oeste"
+    desc: "portão duplo de madeira reforçada aberto para dentro do átrio, marcando o ponto de chegada do jogador"
+    plane: midground
+    box: [0.06, 0.46, 0.05, 0.14]
+    orient: right
+    tags: [edge, door, entry, spawn]
+
+  - id: ponte_central
+    kind: structure
+    label: "a ponte central (Choke Point)"
+    desc: "ponte estreita de pedra sem parapeito cruzando o abismo diretamente do átrio para a câmara do altar; rota curta mas exposta"
+    plane: midground
+    box: [0.30, 0.47, 0.28, 0.12]
+    orient: right
+    tags: [edge, bridge, choke_point, critical_path]
+
+  - id: porta_grade_norte
+    kind: structure
+    label: "a grade trancada do flanco norte"
+    desc: "grade de ferro conectada por trilhos de bronze ao mecanismo do átrio, controlando o acesso da galeria norte à câmara do altar"
+    plane: midground
+    box: [0.64, 0.22, 0.06, 0.06]
+    orient: down
+    tags: [edge, door, locked_gate]
+
+  # --- ELEMENTOS TÁTICOS DE INTERIOR (COBERTURAS, INTERATIVOS E AMEAÇAS) ---
+  - id: cover_pilar_oeste
+    kind: prop
+    label: "o pilar tombado (Cobertura Inicial)"
+    desc: "bloco de coluna caída no átrio oeste posicionado exatamente diante da ponte central para bloquear os disparos da besta"
+    plane: midground
+    box: [0.21, 0.45, 0.06, 0.16]
+    tags: [cover, full_cover]
+
+  - id: mecanismo_grade
+    kind: prop
+    label: "o pedestal da alavanca (Chave Mecânica)"
+    desc: "mecanismo de engrenagens de bronze com cristal ciano no canto norte do átrio que abre a grade da galeria norte"
+    plane: midground
+    box: [0.22, 0.27, 0.06, 0.08]
+    brightness: high
+    saturation: high
+    tags: [interactable, switch, key]
+
+  - id: cover_banco_norte
+    kind: prop
+    label: "o banco de pedra norte (Meia-Cobertura)"
+    desc: "banco pesado de pedra tombado na entrada norte da câmara do altar, oferecendo meia-cobertura a quem sai do flanco"
+    plane: midground
+    box: [0.63, 0.31, 0.08, 0.07]
+    tags: [cover, half_cover]
+
+  - id: cover_banco_sul
+    kind: prop
+    label: "o sarcófago sul (Cobertura Lateral)"
+    desc: "sarcófago de pedra intacto no lado sul da câmara do altar, servindo de cobertura secundária na arena"
+    plane: midground
+    box: [0.63, 0.68, 0.09, 0.08]
+    tags: [cover, full_cover]
+
+  - id: besta_automatica
+    kind: prop
+    label: "a besta automática de defesa"
+    desc: "torreta mecânica de bronze montada em frente ao altar, apontada diretamente para a ponte central"
+    plane: midground
+    box: [0.72, 0.48, 0.07, 0.10]
+    orient: left
+    tags: [hazard, turret, threat]
+
+  - id: altar_relicario
+    kind: prop
+    label: "o altar do relicário (Objetivo Principal)"
+    desc: "pedestal octogonal no fundo leste da câmara sustentando o relicário flutuante de luz ciano-arcana máxima"
+    plane: foreground
+    box: [0.82, 0.45, 0.08, 0.16]
+    orient: left
+    brightness: max
+    saturation: max
+    tags: [objective, focal, interactable]
+
+  # --- CAMADA SUPERIOR (FOREGROUND / VERTICALIDADE) ---
+  - id: arco_viga_superior
+    kind: structure
+    label: "o arco estrutural do teto"
+    desc: "viga de pedra em arco passando por cima do centro do mapa em semitransparência escura para demarcar a divisão entre átrio e santuário"
+    plane: foreground
+    box: [0.42, 0.08, 0.05, 0.84]
+    brightness: low
+    saturation: muted
+    tags: [overhead]
+
+# FLUXO VISUAL E TÁTICO (LANDMARK -> CHOKE POINT -> ENTRADA -> ROTA DE FLANCO)
+gaze:
+  - altar_relicario               # 1. Landmark principal (Objetivo em destaque)
+  - ponte_central.center          # 2. Linha de risco central (Choke Point)
+  - porta_entrada.center          # 3. Entrada no nível (Spawn)
+  - cover_pilar_oeste.center      # 4. Abrigo imediato contra a linha de tiro central
+  - mecanismo_grade.center        # 5. Ativação do mecanismo (Lock & Key)
+  - corredor_flanco_norte.center  # 6. Flanqueamento seguro pelo norte
+  - porta_grade_norte.center      # 7. Acesso lateral destrancado para a arena
+
+# VALIDAÇÃO GEOMÉTRICA E TOPOLÓGICA (ASSERTS DE LEVEL DESIGN)
+asserts:
+  - focal_single
+  - brightest(altar_relicario)
+  # Hierarquia macro de layout (Oeste -> Centro -> Leste)
+  - left_of(atrio_entrada, ponte_central)
+  - left_of(ponte_central, sala_altar)
+  - above(corredor_flanco_norte, ponte_central)
+  # Contenção de interiores (cada peça dentro de sua respectiva sala)
+  - inside(porta_entrada, atrio_entrada)
+  - inside(cover_pilar_oeste, atrio_entrada)
+  - inside(mecanismo_grade, atrio_entrada)
+  - inside(cover_banco_norte, sala_altar)
+  - inside(cover_banco_sul, sala_altar)
+  - inside(besta_automatica, sala_altar)
+  - inside(altar_relicario, sala_altar)
+  # Conectividade do grafo (pontes e portas ligadas às bordas das salas)
+  - near(ponte_central.base, atrio_entrada.right, 0.06)
+  - near(ponte_central.tip, sala_altar.left, 0.06)
+  - near(porta_grade_norte.base, corredor_flanco_norte.right, 0.12)
+  # Linhas de tiro e orientações (Sightlines)
+  - facing(porta_entrada, right)
+  - facing(ponte_central, right)
+  - facing(besta_automatica, left)
+  # Orçamento tático da fase
+  - count(cover) == 3
+  - count(node) == 3
+  - count(edge) == 3
+  # Gameplay (v0.9): visão, cobertura, folga, grafo
+  - occluded(porta_entrada, besta_automatica, cover_pilar_oeste)
+  - line_of_sight(besta_automatica, ponte_central)
+  - no_overlap(cover, door)
+  - clearance(cover_banco_norte, cover_banco_sul, 0.12)
+  - reachable(atrio_entrada, altar_relicario)
+  - no_softlock(atrio_entrada, altar_relicario)
+  - min_paths(atrio_entrada, sala_altar) >= 2
+  - connected(atrio_entrada, sala_altar)
+
+graph:
+  spawn: atrio_entrada
+  goal: altar_relicario
+  nodes:
+    - {id: atrio_entrada, role: spawn}
+    - {id: corredor_flanco_norte, role: flank}
+    - {id: sala_altar, role: boss}
+  edges:
+    - {from: atrio_entrada, to: sala_altar, via: ponte_central, kind: bidirectional}
+    - {from: atrio_entrada, to: corredor_flanco_norte, kind: bidirectional}
+    - {from: corredor_flanco_norte, to: sala_altar, via: porta_grade_norte, kind: locked, unlocked_by: mecanismo_grade}
+
+flow:
+  player_radius: 0.02
+  routes:
+    critical:
+      label: "Caminho crítico (direto)"
+      style: solid
+      points: [porta_entrada.center, cover_pilar_oeste.center, ponte_central.center, altar_relicario.center]
+    flank_norte:
+      label: "Rota de flanco (furtiva)"
+      style: dashed
+      points: [porta_entrada.center, mecanismo_grade.center, corredor_flanco_norte.center, porta_grade_norte.center, altar_relicario.center]
+  sight_cones:
+    - {source: besta_automatica, angle_deg: 45, range: 0.45}
+
+glossary:
+  cover: "coberturas táticas"
+  node: "zonas/salas"
+  edge: "conexões/passagens"
+
+finish: "bordas de parede bem definidas para leitura clara de colisão, contraste nítido entre piso caminhável e abismo"

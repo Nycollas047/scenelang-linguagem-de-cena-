@@ -130,6 +130,50 @@ class VisibleRule(Rule):
         return f"{P.cap(who)} aparece completo, com folga visível entre ele e cada borda do quadro."
 
 
+GAMEPLAY = ("line_of_sight", "occluded", "no_overlap", "clearance", "connected", "reachable", "no_softlock", "min_paths")
+
+
+@register
+class GameplayRule(Rule):
+    """Predicados de level design reprovados na imagem medida: o texto diz o que reabrir/separar, sem inventar geometria."""
+
+    name, kind, priority, checks = "gameplay", "layout", 24, GAMEPLAY
+    side_effects = ("mexe no desenho do mapa: confira a planta depois",)
+
+    def build(self, ctx, f, attempt):
+        a = parse_assert(f.check)
+        n, g = a.name, a.args
+        lab = lambda i: ctx.label(g[i].split(".")[0])  # noqa: E731
+        if n == "line_of_sight":
+            return (f"Nada bloqueia a visão entre {lab(0)} e {lab(1)}: o espaço entre eles fica aberto, sem parede, pilar nem objeto alto."
+                    + ("" if attempt == 0 else " Afaste qualquer cobertura alta da linha reta que liga os dois."))
+        if n == "occluded":
+            who = f"{lab(2)} fica exatamente entre {lab(0)} e {lab(1)}, bloqueando a visão" if len(g) == 3 else \
+                f"{lab(0)} fica escondido da visão de {lab(1)} por um elemento sólido entre eles"
+            return who + "." + ("" if attempt == 0 else " O elemento sólido é alto o bastante para cobrir a linha inteira.")
+        if n == "no_overlap":
+            return f"Os elementos «{g[0]}» e «{g[1]}» ficam separados, cada um no seu espaço, sem sobreposição."
+        if n == "clearance":
+            return (f"Entre {lab(0)} e {lab(1)} sobra passagem livre de pelo menos {float(g[2]) * 100:.0f}% da altura do quadro."
+                    + ("" if attempt == 0 else " Mais espaço vazio entre os dois, de borda a borda."))
+        return (f"Mantenha uma passagem contínua e aberta entre {lab(0)} e {lab(1)}: nenhuma parede, abismo ou objeto fecha o caminho."
+                + ("" if attempt == 0 else " As portas e pontes que ligam os dois ficam visíveis e desobstruídas."))
+
+
+@register
+class WalkableRule(Rule):
+    name, kind, priority, checks = "piso_conectado", "verify", 23, ("walkable_connected",)
+    side_effects = ("pode redesenhar paredes e abismos do mapa",)
+
+    def build(self, ctx, f, attempt):
+        a = _args(f.check)
+        if len(a) < 2:
+            return None
+        s, g = ctx.label(a[0]), ctx.label(a[1])
+        txt = f"Desobstrua a passagem contínua de piso entre {s} e {g}; não feche o corredor com paredes ou abismos."
+        return txt if attempt == 0 else txt + f" O mesmo piso liso e claro liga {s} a {g} sem interrupção, com largura de passagem de sobra."
+
+
 @register
 class ClearZoneRule(Rule):
     name, kind, priority, checks = "zona_livre", "layout", 22, ("clear_zone",)

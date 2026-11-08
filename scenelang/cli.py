@@ -130,6 +130,23 @@ def cmd_compile(a) -> int:
     return 0
 
 
+def cmd_level(a) -> int:
+    from . import level_export as LE
+
+    scene, _ = _load(a.scene)
+    try:
+        out = LE.export(scene, a.export)
+    except LE.ExportError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 2
+    if a.out:
+        Path(a.out).write_text(out, encoding="utf-8")
+        print(f"gravado: {a.out}")
+    else:
+        sys.stdout.write(out)
+    return 0
+
+
 def cmd_check(a) -> int:
     scene, _ = _load(a.scene)
     results = evaluate_all(scene)
@@ -142,7 +159,7 @@ def cmd_check(a) -> int:
 
 def cmd_render(a) -> int:
     scene, _ = _load(a.scene)
-    for p in write_render(scene, a.out, a.width):
+    for p in write_render(scene, a.out, a.width, a.style):
         print(f"gravado: {p}")
     return 0
 
@@ -652,8 +669,14 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("check", help="roda os asserts sobre o layout (sem imagem)")
     s.add_argument("scene"); s.set_defaults(fn=cmd_check)
 
+    s = sub.add_parser("level", help="exporta a planta/grafo da cena (mermaid, tiled, godot, unity)")
+    s.add_argument("scene"); s.add_argument("--export", required=True, help="mermaid | tiled | godot | unity"); s.add_argument("--out")
+    s.set_defaults(fn=cmd_level)
+
     s = sub.add_parser("render", help="desenha o esquema 2D (SVG ou PNG)")
     s.add_argument("scene"); s.add_argument("--out", required=True); s.add_argument("--width", type=int, default=960)
+    s.add_argument("--style", choices=["schematic", "floorplan"], default="schematic",
+                   help="floorplan: planta baixa (paredes duplas, portas com arco, hachura de cobertura, escala e grafo)")
     s.set_defaults(fn=cmd_render)
 
     s = sub.add_parser("eval-form", help="gera a ficha de avaliação da imagem")

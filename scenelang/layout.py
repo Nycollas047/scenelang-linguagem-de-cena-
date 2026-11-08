@@ -140,3 +140,38 @@ def size_px(ratio: float, size: str | None = None, long_side: int = 1344) -> tup
     else:
         w, h = long_side * ratio, long_side
     return int(round(w / 8) * 8), int(round(h / 8) * 8)
+
+
+# ---- geometria de gameplay (v0.9) ---------------------------------------------------------------------------
+def boxes_overlap(a, b, eps: float = 1e-9) -> bool:
+    """As caixas (x, y, w, h) têm interseção de área positiva? Encostar na borda não conta."""
+    return min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > eps and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > eps
+
+
+def box_clearance(a, b, ratio: float = 1.0) -> float:
+    """Distância borda a borda entre duas caixas (0 se se tocam ou sobrepõem), em alturas do quadro."""
+    dx = max(a[0] - (b[0] + b[2]), b[0] - (a[0] + a[2]), 0.0)
+    dy = max(a[1] - (b[1] + b[3]), b[1] - (a[1] + a[3]), 0.0)
+    return math.hypot(dx * ratio, dy)
+
+
+def segment_intersects_box(p1, p2, box, eps: float = 1e-9) -> bool:
+    """Liang–Barsky: o segmento p1→p2 cruza (ou toca por dentro) a caixa (x, y, w, h)?"""
+    x, y, w, h = box
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, p1[0] - x), (dx, x + w - p1[0]), (-dy, p1[1] - y), (dy, y + h - p1[1])):
+        if abs(p) < eps:
+            if q < -eps:
+                return False          # paralelo e fora
+            continue
+        t = q / p
+        if p < 0:
+            if t > t1:
+                return False
+            t0 = max(t0, t)
+        else:
+            if t < t0:
+                return False
+            t1 = min(t1, t)
+    return t0 <= t1 + eps

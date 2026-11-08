@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from . import character, fx, guides, interactions, materials, pose
+from . import character, flow, fx, guides, interactions, materials, pose
 from . import layout as L
 from . import palette as PAL
 from . import phrases as P
@@ -46,7 +46,7 @@ def priorities(scene: Scene) -> tuple[list[str], list[str]]:
     reminders: list[str] = []
     for raw in boost + rest:
         a = parse_assert(raw)
-        if a.name == "focal_single":
+        if a.name == "focal_single" or a.name in V.DESIGN_ONLY_PREDICATES:
             continue
         statement = P.assert_texts(scene, a)[0]
         if raw in boost:
@@ -80,6 +80,23 @@ def entity_sentence(scene: Scene, e: Entity, skip: frozenset = frozenset()) -> s
         if extra:
             parts.append(extra)
     return " ".join(parts)
+
+
+def topology_sentences(scene: Scene) -> list[str]:
+    """Uma frase por aresta do grafo: o que liga o quê, por onde, e se a passagem tem trava."""
+    out = []
+    for e in scene.data.get("graph", {}).get("edges", []) if isinstance(scene.data.get("graph"), dict) else []:
+        a, b = scene.by_id.get(e.get("from")), scene.by_id.get(e.get("to"))
+        if a is None or b is None:
+            continue
+        via = scene.by_id.get(e.get("via")) if e.get("via") else None
+        kind = e.get("kind", "bidirectional")
+        how = f" por {via.label}" if via else " em contato direto"
+        txt = f"{P.cap(a.label)} liga-se a {b.label}{how}"
+        txt += {"one_way": " (passagem de mão única)", "locked": " (passagem trancada, aberta por " + (scene.by_id[e["unlocked_by"]].label if e.get("unlocked_by") in scene.by_id else "uma chave") + ")",
+                "destructible": " (passagem que pode ser destruída)", "hazard": " (passagem perigosa)"}.get(kind, "")
+        out.append(txt + ".")
+    return out
 
 
 def light_sentence(scene: Scene, li: dict) -> str:
@@ -185,6 +202,12 @@ def build_ir(scene: Scene, passname: str | None = None, skip: frozenset = frozen
         for plane in PLANE_ORDER
         if any(e.plane == plane for e in scene.entities)
     }
+    topo = topology_sentences(scene)
+    if topo:
+        ir["topologia"] = topo
+    fl = flow.sentences(scene)
+    if fl:
+        ir["fluxo"] = fl
     inter = interactions.sentences(scene)
     if inter:
         ir["interacoes"] = inter
@@ -244,6 +267,10 @@ def _prose_from_ir(ir: dict) -> str:
         lines += [f"- {s}" for s in sentences]
     if "interacoes" in ir:
         lines += ["", "INTERAÇÕES:"] + [f"- {s}" for s in ir["interacoes"]]
+    if "topologia" in ir:
+        lines += ["", "TOPOLOGIA:"] + [f"- {s}" for s in ir["topologia"]]
+    if "fluxo" in ir:
+        lines += ["", "FLUXO:"] + [f"- {s}" for s in ir["fluxo"]]
     if "iluminacao" in ir:
         lines += ["", "ILUMINAÇÃO:"] + [f"- {s}" for s in ir["iluminacao"]]
     if "camera" in ir:
@@ -283,7 +310,7 @@ def to_regions(scene: Scene, size: str | None = None, passname: str | None = Non
     style = d["style"]
     weights = {k: float(v) / 100.0 for k, v in (style.get("mix") or {}).items()}
     global_bits = [ir["estilo"], ir["quadro"], ir["grade"]]
-    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera", "intencao", "interacoes", "iluminacao", "ordem_do_olhar",
+    for key in ("pixel", "guias", "atmosfera", "fundo", "paleta", "camera", "intencao", "interacoes", "topologia", "fluxo", "iluminacao", "ordem_do_olhar",
                 "detalhes", "detalhe_de_textura", "manter_igual", "acabamento", "correcoes", "lembrete_final"):
         if key in ir:
             v = ir[key]
@@ -334,7 +361,7 @@ def _compact_from_ir(ir: dict) -> str:
             parts.append(ir[key])
     for plane, sentences in ir["planos"].items():
         parts.append(f"[{plane}] " + " ".join(sentences))
-    for key in ("interacoes", "iluminacao", "camera", "detalhe_de_textura", "paleta", "detalhes", "fundo", "acabamento", "manter_igual", "correcoes"):
+    for key in ("interacoes", "topologia", "fluxo", "iluminacao", "camera", "detalhe_de_textura", "paleta", "detalhes", "fundo", "acabamento", "manter_igual", "correcoes"):
         if key in ir:
             v = ir[key]
             parts.append(" ".join(v) if isinstance(v, list) else v)
@@ -344,7 +371,7 @@ def _compact_from_ir(ir: dict) -> str:
 # ---- orçamento de tokens ---------------------------------------------------------------------------------------
 # Do que menos pesa para o que mais pesa. Nunca se poda: estilo, quadro, grade, prioridades essenciais, frase-base de cada
 # entidade, câmera, fundo, acabamento, travas e correções; a entidade focal mantém todas as camadas.
-BUDGET_LADDER = ("detalhe_de_textura", "ordem_do_olhar", "lembrete_final", "detalhes", "entity:wind", "entity:details", "entity:material",
+BUDGET_LADDER = ("detalhe_de_textura", "ordem_do_olhar", "lembrete_final", "fluxo", "topologia", "detalhes", "entity:wind", "entity:details", "entity:material",
                  "iluminacao", "atmosfera", "entity:pose", "entity:character", "intencao", "paleta", "prioridades")
 PRIORITY_KEEP = 6      # no último degrau, ficam o foco, os reforçados e os primeiros asserts até este total
 

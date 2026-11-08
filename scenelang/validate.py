@@ -17,7 +17,7 @@ from . import layout as L
 from . import vocab as V
 from .assertions import AssertSyntaxError, check_refs, parse_assert
 from .model import SLUG, Diagnostic, RefError, Scene, build_scene
-from . import interactions, zones
+from . import flow, interactions, metrics, topology, zones
 from . import character, fx, guides, lint, locate, materials, pose, palette as pal_layer
 from . import variants
 from . import verify as verify_mod
@@ -28,7 +28,7 @@ TOP_KEYS = {
     "lights", "entities", "gaze", "asserts", "details", "finish", "glossary",
     "avoid", "priority_boost", "history", "corrections",
     "colors", "guides", "background", "atmosphere", "materials", "detail", "verify", "lock", "extends", "import",
-    "auto_asserts", "interactions", "safe_zones",
+    "auto_asserts", "interactions", "safe_zones", "graph", "flow",
 }
 REQUIRED_TOP = ("scene", "canvas", "grid", "style", "intent", "entities")
 ENTITY_KEYS = {
@@ -215,9 +215,12 @@ def validate_data(data) -> tuple[list[Diagnostic], Scene | None]:
     _check_auto_asserts(c, data)
     interactions.check(c, data, scene)
     zones.check(c, data, scene)
+    topology.check(c, data, scene)
+    flow.check(c, data, scene)
     _check_misc(c, data)
     pal_layer.check(c, data)
     guides.check(c, data, scene)
+    metrics.check(c, data, scene)
     fx.check_background(c, data, scene)
     fx.check_atmosphere(c, data, scene)
     materials.check(c, data)

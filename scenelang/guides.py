@@ -17,7 +17,7 @@ CANONS = {"chibi": 2.0, "stylized": 4.0, "child": 5.0, "realistic": 7.5, "heroic
 LINE_ORDER = ("head_top", "eye", "chin", "shoulder", "waist", "knee", "baseline")
 LINE_PT = {"head_top": "o topo da cabeça", "eye": "a linha dos olhos", "chin": "o queixo", "shoulder": "os ombros",
            "waist": "a cintura", "knee": "os joelhos", "baseline": "a linha do chão (pés)"}
-GUIDE_KEYS = {"mode", "subject", "canon", "axis", "lines", "margin", "proposal"}
+GUIDE_KEYS = {"mode", "subject", "canon", "axis", "lines", "margin", "proposal", "metrics"}
 MODES = ("fixed", "model_proposes")
 DEFAULT_LINES = ["head_top", "chin", "shoulder", "waist", "knee", "baseline"]
 
