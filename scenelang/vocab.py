@@ -148,9 +148,10 @@ PREDICATES = (
     "reachable",
     "no_softlock",
     "min_paths",
+    "requires",
 )
 # Predicados de projeto (level design): só têm sentido sobre a planta/grafo, não descrevem nada para o gerador de imagem.
-DESIGN_ONLY_PREDICATES = ("connected", "reachable", "no_softlock", "min_paths")
+DESIGN_ONLY_PREDICATES = ("connected", "reachable", "no_softlock", "min_paths", "requires")
 # Etiquetas que fazem uma entidade bloquear a linha de visão.
 SIGHT_BLOCKER_TAGS = ("los_blocker", "full_cover", "wall")
 

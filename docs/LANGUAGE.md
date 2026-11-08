@@ -240,3 +240,4 @@ Pensado para mapas, interiores e blockout; a cena é a planta (caixas normalizad
 - **`verify: walkable_connected(origem, destino[, ΔE])`**: o piso (cor lida nas caixas de origem e destino) liga os dois na imagem pronta? Erosão por `flow.player_radius`; piso quase ausente nas caixas = reprovado (inconclusivo não aprova). Regra de correção própria.
 - **`scenelang level CENA --export mermaid|tiled|godot|unity`**: Mermaid e JSONs (Tiled, Unity) são conferidos por testes; o `.tscn` do Godot **não foi aberto no Godot**. LDtk não é suportado (erro explícito). Alturas 3D por etiqueta/plano são convenção de blockout.
 - Exemplo completo: `examples/interior_santuario_level.yaml`.
+- `requires(origem, destino, chave)`: a chave é obrigatória? Falha se existe atalho que contorne a trava (e se a chave não abre nada ou o destino é inalcançável).

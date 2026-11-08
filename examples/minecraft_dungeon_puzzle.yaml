@@ -1,0 +1,744 @@
+scene: Templo das Três Chaves — dungeon de quebra-cabeça para Minecraft
+version: 1
+canvas:
+  shape: rect
+  ratio: '16:9'
+  pixel_grid: 64
+grid:
+  kind: thirds
+style:
+  base: planta baixa de blockout para mapa de Minecraft, vista de cima, blocos quadrados legíveis
+  mix:
+    mapa de dungeon top-down limpo: 60
+    arte de blocos voxel estilo Minecraft: 40
+intent:
+  emotion: 'curiosidade e progressão: cada chave abre a próxima sala'
+  story: um templo antigo guarda o tesouro atrás de três portas trancadas; cada porta pede uma chave ganha num quebra-cabeça diferente
+  focal: bau_tesouro
+camera:
+  angle: top
+  lens: normal
+guides:
+  mode: fixed
+  metrics:
+    unit: block
+    cell_size: 1
+    door_width_cells: 2
+    corridor_min_cells: 3
+    cover_min_cells: 1
+entities:
+- id: hall_entrada
+  kind: structure
+  label: o salão de entrada
+  desc: salão de pedra polida onde o jogador nasce; paredes de tijolo de pedra e tochas
+  plane: background
+  box:
+  - 0.0469
+  - 0.3889
+  - 0.1875
+  - 0.3333
+  tags:
+  - node
+  - room
+  - safe_zone
+  - spawn
+- id: atrio_central
+  kind: structure
+  label: o átrio das três portas
+  desc: sala de distribuição em cruz, piso de pedra lisa, mural com o mapa do templo
+  plane: background
+  box:
+  - 0.3438
+  - 0.3611
+  - 0.2188
+  - 0.2778
+  tags:
+  - node
+  - room
+  - hub
+- id: sala_placas
+  kind: structure
+  label: a sala das placas de pressão
+  desc: sala de pedra com três placas de pressão no chão e blocos empurráveis
+  plane: background
+  box:
+  - 0.2969
+  - 0.0556
+  - 0.3438
+  - 0.25
+  tags:
+  - node
+  - room
+  - puzzle
+- id: sala_alavancas
+  kind: structure
+  label: a sala das alavancas
+  desc: sala baixa de tijolos escuros com quatro alavancas na parede sul e lâmpadas de redstone na parede norte
+  plane: background
+  box:
+  - 0.2969
+  - 0.6944
+  - 0.3281
+  - 0.1944
+  tags:
+  - node
+  - room
+  - puzzle
+- id: sala_arqueiro
+  kind: structure
+  label: a sala do arqueiro
+  desc: salão longo cortado por um poço de lava; uma plataforma de arco de um lado e um bloco-alvo do outro
+  plane: background
+  box:
+  - 0.6562
+  - 0.3611
+  - 0.2812
+  - 0.2778
+  tags:
+  - node
+  - room
+  - puzzle
+- id: camara_tesouro
+  kind: structure
+  label: a câmara do tesouro
+  desc: câmara de quartzo e ouro com o baú do tesouro ao fundo
+  plane: background
+  box:
+  - 0.7188
+  - 0.7222
+  - 0.2188
+  - 0.1667
+  tags:
+  - node
+  - room
+  - reward
+- id: sala_secreta
+  kind: structure
+  label: a sala secreta
+  desc: nicho escondido com um baú de dicas, atrás de uma parede rachada
+  plane: background
+  box:
+  - 0.0469
+  - 0.0556
+  - 0.1875
+  - 0.1944
+  tags:
+  - node
+  - room
+  - secret
+- id: corredor_entrada
+  kind: structure
+  label: o corredor de entrada
+  desc: corredor largo de três blocos ligando o salão ao átrio
+  plane: background
+  box:
+  - 0.2344
+  - 0.5
+  - 0.1094
+  - 0.0833
+  tags:
+  - edge
+  - corridor
+- id: porta_placas
+  kind: structure
+  label: a porta norte do átrio
+  desc: arco de pedra aberto, sem trava
+  plane: midground
+  box:
+  - 0.4219
+  - 0.3056
+  - 0.0312
+  - 0.0556
+  tags:
+  - edge
+  - door
+  orient: up
+- id: porta_ferro_alavancas
+  kind: structure
+  label: a porta de ferro das alavancas
+  desc: porta de ferro dupla que só abre com a chave de ferro
+  plane: midground
+  box:
+  - 0.4219
+  - 0.6389
+  - 0.0312
+  - 0.0556
+  tags:
+  - edge
+  - door
+  - locked
+  orient: down
+- id: porta_ouro_arqueiro
+  kind: structure
+  label: a porta de ouro do arqueiro
+  desc: porta dupla com detalhes dourados, trancada pela chave de ouro
+  plane: midground
+  box:
+  - 0.5781
+  - 0.4722
+  - 0.0312
+  - 0.0833
+  tags:
+  - edge
+  - door
+  - locked
+  orient: right
+- id: porta_diamante
+  kind: structure
+  label: a porta de diamante do cofre
+  desc: porta dupla de diamante, trancada pela chave de diamante
+  plane: midground
+  box:
+  - 0.7969
+  - 0.6389
+  - 0.0469
+  - 0.0833
+  tags:
+  - edge
+  - door
+  - locked
+  orient: down
+- id: parede_rachada
+  kind: structure
+  label: a parede rachada
+  desc: parede de pedra rachada que se quebra com picareta ou TNT
+  plane: midground
+  box:
+  - 0.25
+  - 0.1111
+  - 0.0312
+  - 0.0833
+  tags:
+  - edge
+  - wall
+  - destructible
+  orient: left
+- id: tunel_retorno
+  kind: structure
+  label: o túnel de retorno
+  desc: túnel de três blocos de largura por baixo do templo, só de ida, saindo do cofre
+  plane: background
+  box:
+  - 0.0469
+  - 0.9167
+  - 0.8906
+  - 0.0833
+  tags:
+  - edge
+  - corridor
+  - one_way
+  orient: left
+- id: escada_retorno
+  kind: structure
+  label: a escada de retorno
+  desc: escada que sobe do túnel até o salão de entrada
+  plane: background
+  box:
+  - 0.125
+  - 0.7222
+  - 0.0469
+  - 0.1944
+  tags:
+  - edge
+  - corridor
+  - stairs
+  orient: up
+- id: ponto_spawn
+  kind: prop
+  label: o ponto de nascimento
+  desc: cama de respawn marcada no chão do salão
+  plane: midground
+  box:
+  - 0.125
+  - 0.5278
+  - 0.0312
+  - 0.0556
+  tags:
+  - spawn
+  - marker
+- id: placa_1
+  kind: prop
+  label: a placa de pressão 1
+  desc: placa de pressão de pedra no piso
+  plane: midground
+  box:
+  - 0.3438
+  - 0.1944
+  - 0.0312
+  - 0.0556
+  tags:
+  - plate
+  - interactable
+  brightness: normal
+- id: placa_2
+  kind: prop
+  label: a placa de pressão 2
+  desc: placa de pressão de pedra no piso
+  plane: midground
+  box:
+  - 0.4219
+  - 0.1944
+  - 0.0312
+  - 0.0556
+  tags:
+  - plate
+  - interactable
+  brightness: normal
+- id: placa_3
+  kind: prop
+  label: a placa de pressão 3
+  desc: placa de pressão de pedra no piso
+  plane: midground
+  box:
+  - 0.5
+  - 0.1944
+  - 0.0312
+  - 0.0556
+  tags:
+  - plate
+  - interactable
+  brightness: normal
+- id: bloco_1
+  kind: prop
+  label: o bloco empurrável 1
+  desc: bloco de pedra que o jogador empurra com pistão ou alavanca
+  plane: midground
+  box:
+  - 0.3438
+  - 0.0833
+  - 0.0312
+  - 0.0556
+  tags:
+  - pushable
+  - block
+- id: bloco_2
+  kind: prop
+  label: o bloco empurrável 2
+  desc: bloco de pedra que o jogador empurra com pistão ou alavanca
+  plane: midground
+  box:
+  - 0.4219
+  - 0.0833
+  - 0.0312
+  - 0.0556
+  tags:
+  - pushable
+  - block
+- id: bloco_3
+  kind: prop
+  label: o bloco empurrável 3
+  desc: bloco de pedra que o jogador empurra com pistão ou alavanca
+  plane: midground
+  box:
+  - 0.5
+  - 0.0833
+  - 0.0312
+  - 0.0556
+  tags:
+  - pushable
+  - block
+- id: portao_placas
+  kind: structure
+  label: o portão de grades da sala das placas
+  desc: grade de ferro que sobe quando as três placas estão pressionadas
+  plane: midground
+  box:
+  - 0.5625
+  - 0.0833
+  - 0.0156
+  - 0.1667
+  tags:
+  - wall
+  - gate
+  - locked_gate
+  - los_blocker
+- id: chave_ferro
+  kind: prop
+  label: a chave de ferro
+  desc: pedestal com a chave de ferro, atrás do portão de grades
+  plane: midground
+  box:
+  - 0.5781
+  - 0.1389
+  - 0.0312
+  - 0.0556
+  tags:
+  - key
+  - interactable
+  brightness: high
+  saturation: high
+- id: alavanca_1
+  kind: prop
+  label: a alavanca 1
+  desc: alavanca de pedregulho na parede sul
+  plane: midground
+  box:
+  - 0.3438
+  - 0.8333
+  - 0.0312
+  - 0.0278
+  tags:
+  - lever
+  - interactable
+- id: alavanca_2
+  kind: prop
+  label: a alavanca 2
+  desc: alavanca de pedregulho na parede sul
+  plane: midground
+  box:
+  - 0.4062
+  - 0.8333
+  - 0.0312
+  - 0.0278
+  tags:
+  - lever
+  - interactable
+- id: alavanca_3
+  kind: prop
+  label: a alavanca 3
+  desc: alavanca de pedregulho na parede sul
+  plane: midground
+  box:
+  - 0.4688
+  - 0.8333
+  - 0.0312
+  - 0.0278
+  tags:
+  - lever
+  - interactable
+- id: alavanca_4
+  kind: prop
+  label: a alavanca 4
+  desc: alavanca de pedregulho na parede sul
+  plane: midground
+  box:
+  - 0.5312
+  - 0.8333
+  - 0.0312
+  - 0.0278
+  tags:
+  - lever
+  - interactable
+- id: lampada_1
+  kind: prop
+  label: a lâmpada de redstone 1
+  desc: lâmpada de redstone que mostra a ordem da sequência
+  plane: midground
+  at:
+    above: alavanca_1
+    gap: 0.08
+  size:
+  - 0.0312
+  - 0.0278
+  tags:
+  - lamp
+  - hint
+  brightness: normal
+- id: lampada_2
+  kind: prop
+  label: a lâmpada de redstone 2
+  desc: lâmpada de redstone que mostra a ordem da sequência
+  plane: midground
+  at:
+    above: alavanca_2
+    gap: 0.08
+  size:
+  - 0.0312
+  - 0.0278
+  tags:
+  - lamp
+  - hint
+  brightness: normal
+- id: lampada_3
+  kind: prop
+  label: a lâmpada de redstone 3
+  desc: lâmpada de redstone que mostra a ordem da sequência
+  plane: midground
+  at:
+    above: alavanca_3
+    gap: 0.08
+  size:
+  - 0.0312
+  - 0.0278
+  tags:
+  - lamp
+  - hint
+  brightness: normal
+- id: lampada_4
+  kind: prop
+  label: a lâmpada de redstone 4
+  desc: lâmpada de redstone que mostra a ordem da sequência
+  plane: midground
+  at:
+    above: alavanca_4
+    gap: 0.08
+  size:
+  - 0.0312
+  - 0.0278
+  tags:
+  - lamp
+  - hint
+  brightness: normal
+- id: pilar_alavancas
+  kind: structure
+  label: o pilar central das alavancas
+  desc: pilar de tijolo que divide a sala sem bloquear a leitura das lâmpadas
+  plane: midground
+  box:
+  - 0.4375
+  - 0.7778
+  - 0.0156
+  - 0.0278
+  tags:
+  - pillar
+- id: chave_ouro
+  kind: prop
+  label: a chave de ouro
+  desc: chave de ouro num baú preso atrás de uma grade que sobe quando a sequência de alavancas está certa
+  plane: midground
+  box:
+  - 0.5625
+  - 0.75
+  - 0.0312
+  - 0.0556
+  tags:
+  - key
+  - interactable
+  brightness: high
+  saturation: high
+- id: plataforma_arco
+  kind: prop
+  label: a plataforma do arco
+  desc: plataforma de pedra onde o jogador fica para atirar
+  plane: midground
+  box:
+  - 0.6719
+  - 0.4444
+  - 0.0625
+  - 0.1111
+  tags:
+  - platform
+  - safe_zone
+- id: poco_lava
+  kind: terrain
+  label: o poço de lava
+  desc: poço de lava que separa a plataforma do lado do alvo
+  plane: background
+  box:
+  - 0.75
+  - 0.3889
+  - 0.0938
+  - 0.2222
+  tags:
+  - hazard
+  - lava
+- id: alvo_flecha
+  kind: prop
+  label: o bloco-alvo
+  desc: bloco-alvo que abre a grade do cofre quando atingido por uma flecha
+  plane: midground
+  box:
+  - 0.8906
+  - 0.4722
+  - 0.0312
+  - 0.0556
+  tags:
+  - target
+  - interactable
+  brightness: normal
+- id: pilar_cobertura
+  kind: structure
+  label: o pilar de cobertura
+  desc: pilar de pedra que protege a plataforma das flechas do dispensador sem tapar a mira para o alvo
+  plane: midground
+  box:
+  - 0.7812
+  - 0.5278
+  - 0.0312
+  - 0.0556
+  tags:
+  - pillar
+  - cover
+  - full_cover
+  - los_blocker
+- id: dispensador_flechas
+  kind: prop
+  label: o dispensador de flechas
+  desc: dispensador na parede leste que atira flechas na plataforma
+  plane: midground
+  box:
+  - 0.8906
+  - 0.5556
+  - 0.0312
+  - 0.0556
+  tags:
+  - hazard
+  - trap
+  - dispenser
+  orient: left
+- id: chave_diamante
+  kind: prop
+  label: a chave de diamante
+  desc: chave de diamante num pedestal atrás do alvo, liberada pelo bloco-alvo
+  plane: midground
+  box:
+  - 0.8906
+  - 0.3889
+  - 0.0312
+  - 0.0556
+  tags:
+  - key
+  - interactable
+  brightness: high
+  saturation: high
+- id: bau_tesouro
+  kind: prop
+  label: o baú do tesouro
+  desc: 'baú do tesouro sobre um pedestal de ouro, com brilho máximo: o objetivo do templo'
+  plane: foreground
+  box:
+  - 0.8281
+  - 0.7778
+  - 0.0469
+  - 0.0556
+  tags:
+  - objective
+  - focal
+  - interactable
+  - chest
+  brightness: max
+  saturation: max
+graph:
+  spawn: hall_entrada
+  goal: bau_tesouro
+  nodes:
+  - id: hall_entrada
+    role: spawn
+  - id: atrio_central
+    role: hub
+  - id: sala_placas
+    role: puzzle
+  - id: sala_alavancas
+    role: puzzle
+  - id: sala_arqueiro
+    role: puzzle
+  - id: camara_tesouro
+    role: reward
+  - id: sala_secreta
+    role: secret
+  edges:
+  - from: hall_entrada
+    to: atrio_central
+    via: corredor_entrada
+  - from: atrio_central
+    to: sala_placas
+    via: porta_placas
+  - from: atrio_central
+    to: sala_alavancas
+    via: porta_ferro_alavancas
+    kind: locked
+    unlocked_by: chave_ferro
+  - from: atrio_central
+    to: sala_arqueiro
+    via: porta_ouro_arqueiro
+    kind: locked
+    unlocked_by: chave_ouro
+  - from: sala_arqueiro
+    to: camara_tesouro
+    via: porta_diamante
+    kind: locked
+    unlocked_by: chave_diamante
+  - from: sala_placas
+    to: sala_secreta
+    via: parede_rachada
+    kind: destructible
+  - from: camara_tesouro
+    to: hall_entrada
+    via: tunel_retorno
+    kind: one_way
+flow:
+  player_radius: 0.01
+  routes:
+    progressao:
+      label: Progressão ideal
+      style: solid
+      points:
+      - ponto_spawn.center
+      - atrio_central.center
+      - chave_ferro.center
+      - porta_ferro_alavancas.center
+      - chave_ouro.center
+      - porta_ouro_arqueiro.center
+      - chave_diamante.center
+      - porta_diamante.center
+      - bau_tesouro.center
+    retorno:
+      label: Retorno (só de ida)
+      style: dashed
+      points:
+      - bau_tesouro.center
+      - tunel_retorno.center
+      - escada_retorno.center
+      - ponto_spawn.center
+  sight_cones:
+  - source: dispensador_flechas
+    angle_deg: 30
+    range: 0.35
+asserts:
+- focal_single
+- brightest(bau_tesouro)
+- left_of(hall_entrada, atrio_central)
+- left_of(atrio_central, sala_arqueiro)
+- above(sala_placas, atrio_central)
+- below(sala_alavancas, atrio_central)
+- below(sala_arqueiro, sala_placas)
+- inside(chave_ferro, sala_placas)
+- inside(placa_1, sala_placas)
+- inside(placa_2, sala_placas)
+- inside(placa_3, sala_placas)
+- inside(bloco_1, sala_placas)
+- inside(bloco_2, sala_placas)
+- inside(bloco_3, sala_placas)
+- inside(chave_ouro, sala_alavancas)
+- inside(lampada_1, sala_alavancas)
+- inside(lampada_4, sala_alavancas)
+- inside(chave_diamante, sala_arqueiro)
+- inside(plataforma_arco, sala_arqueiro)
+- inside(alvo_flecha, sala_arqueiro)
+- inside(dispensador_flechas, sala_arqueiro)
+- inside(bau_tesouro, camara_tesouro)
+- inside(ponto_spawn, hall_entrada)
+- count(pushable) == 3
+- count(plate) == 3
+- count(lever) == 4
+- count(lamp) == 4
+- count(key) == 3
+- no_overlap(pushable, plate)
+- no_overlap(pushable, pushable)
+- no_overlap(lever, lamp)
+- no_overlap(hazard, platform)
+- line_of_sight(porta_ferro_alavancas, lampada_1)
+- line_of_sight(porta_ferro_alavancas, lampada_4)
+- line_of_sight(plataforma_arco, alvo_flecha)
+- occluded(plataforma_arco, dispensador_flechas, pilar_cobertura)
+- clearance(bloco_1, bloco_2, 0.05)
+- clearance(pilar_alavancas, alavanca_2, 0.02)
+- connected(hall_entrada, atrio_central)
+- connected(atrio_central, sala_alavancas)
+- connected(atrio_central, sala_arqueiro)
+- connected(sala_arqueiro, camara_tesouro)
+- connected(sala_placas, sala_secreta)
+- reachable(hall_entrada, bau_tesouro)
+- no_softlock(hall_entrada, bau_tesouro)
+- reachable(camara_tesouro, hall_entrada)
+- min_paths(hall_entrada, camara_tesouro) == 1
+- requires(hall_entrada, camara_tesouro, chave_ferro)
+- requires(hall_entrada, camara_tesouro, chave_ouro)
+- requires(hall_entrada, camara_tesouro, chave_diamante)
+glossary:
+  pushable: blocos empurráveis
+  plate: placas de pressão
+  lever: alavancas
+  lamp: lâmpadas de dica
+  key: chaves e baús de chave
+finish: paredes de um bloco de espessura bem definidas, portas legíveis, cada sala com cor de piso própria

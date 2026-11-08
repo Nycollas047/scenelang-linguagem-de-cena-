@@ -34,8 +34,9 @@ ARITY = {
     "reachable": (2, 2),
     "no_softlock": (2, 2),
     "min_paths": (2, 2),
+    "requires": (3, 3),
 }
-GRAPH_PREDICATES = ("connected", "reachable", "no_softlock", "min_paths")
+GRAPH_PREDICATES = ("connected", "reachable", "no_softlock", "min_paths", "requires")
 REF_ARGS = {  # quais argumentos são referências
     "above": (0, 1),
     "below": (0, 1),
@@ -53,6 +54,7 @@ REF_ARGS = {  # quais argumentos são referências
     "reachable": (0, 1),
     "no_softlock": (0, 1),
     "min_paths": (0, 1),
+    "requires": (0, 1, 2),
 }
 NEAR_DEFAULT_TOL = 0.06
 
@@ -279,6 +281,8 @@ def evaluate(scene: Scene, a: Assert) -> Result:
             ok, why = topology.reachable(scene, *a.args)
         elif n == "no_softlock":
             ok, why = topology.no_softlock(scene, *a.args)
+        elif n == "requires":
+            ok, why = topology.requires(scene, *a.args)
         else:
             k, why = topology.max_paths(scene, *a.args)
             ok = _cmp(a.op, k, a.num)

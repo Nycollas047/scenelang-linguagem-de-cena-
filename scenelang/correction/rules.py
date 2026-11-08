@@ -130,7 +130,7 @@ class VisibleRule(Rule):
         return f"{P.cap(who)} aparece completo, com folga visível entre ele e cada borda do quadro."
 
 
-GAMEPLAY = ("line_of_sight", "occluded", "no_overlap", "clearance", "connected", "reachable", "no_softlock", "min_paths")
+GAMEPLAY = ("line_of_sight", "occluded", "no_overlap", "clearance", "connected", "reachable", "no_softlock", "min_paths", "requires")
 
 
 @register

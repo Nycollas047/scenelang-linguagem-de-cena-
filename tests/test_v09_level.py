@@ -325,3 +325,30 @@ def test_api_level_export_e_budget(tmp_path):
     c = api.compile_scene(BASE, "prose", token_budget=600)
     assert c["ok"] and c["budget"]["tokens"] <= 600 or not c["budget"]["fits"]
     assert not api.compile_scene(BASE, "json", token_budget=100)["ok"]
+
+
+def test_metrica_tolera_arredondamento_da_caixa():
+    # 3 células exatas escritas com 4 casas (0.0469·64 = 3.0016; 0.0468·64 = 2.9952) não podem virar «3.0 < 3»
+    t = mutate(lambda d: (d["guides"]["metrics"].update({"door_width_cells": 3}), ent(d, "porta_grade_norte").update({"box": [0.64, 0.22, 0.0468, 0.06]})))
+    d, _, _ = load(t)
+    assert not [x for x in d if x.level == "warning" and "porta_grade_norte" in x.path]
+
+
+def test_requires_detecta_atalho_que_contorna_a_trava():
+    ok = mutate(lambda d: d["asserts"].append("requires(atrio_entrada, sala_altar, mecanismo_grade)"))
+    # no exemplo a ponte liga direto: a chave NÃO é obrigatória (e o predicado diz isso)
+    r = results(ok)["requires(atrio_entrada, sala_altar, mecanismo_grade)"]
+    assert not r.ok and "NÃO é obrigatória" in r.detail
+
+    def sem_ponte(d):
+        d["graph"]["edges"] = [e for e in d["graph"]["edges"] if e.get("via") != "ponte_central"]
+        d["asserts"] = ["requires(atrio_entrada, sala_altar, mecanismo_grade)", "focal_single"]
+    r2 = results(mutate(sem_ponte))["requires(atrio_entrada, sala_altar, mecanismo_grade)"]
+    assert r2.ok and "exige a chave" in r2.detail
+
+
+def test_requires_chave_que_nao_abre_nada_e_inalcancavel():
+    def f(d):
+        d["asserts"] = ["requires(atrio_entrada, sala_altar, cover_pilar_oeste)", "focal_single"]
+    r = results(mutate(f))["requires(atrio_entrada, sala_altar, cover_pilar_oeste)"]
+    assert not r.ok and "não abre nenhuma passagem" in r.detail

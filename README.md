@@ -100,6 +100,7 @@ Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
 - `scenelang new sprite|splash|emblem|character-sheet` — cenas iniciais que já validam sem avisos.
 - `examples/pixel_heroi_noite.yaml` — variante por `extends` + biblioteca de materiais + travas.
 - `examples/interior_santuario_level.yaml` — level design: grafo com porta trancada, rotas, cone de visão, métrica em células e 29 asserts (visão, cobertura, folga, softlock, caminhos independentes).
+- `examples/minecraft_dungeon_puzzle.yaml` — dungeon de quebra-cabeça para Minecraft (1 célula = 1 bloco, 3 puzzles encadeados por chaves, 54 asserts, `requires` e `no_softlock`).
 
 ## Status
 

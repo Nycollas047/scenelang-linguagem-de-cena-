@@ -16,6 +16,7 @@ import math
 
 from . import vocab as V
 
+CELL_TOL = 0.01          # ruído de arredondamento da caixa (2–4 casas decimais) não vale aviso: 0,01 célula
 KEYS = {"unit", "cell_size", "door_width_cells", "corridor_min_cells", "cover_min_cells"}
 RULES = (("door", "door_width_cells", "largura da passagem"), ("corridor", "corridor_min_cells", "largura do corredor"),
          ("cover", "cover_min_cells", "tamanho da cobertura"))
@@ -82,7 +83,7 @@ def check(c, data: dict, scene) -> None:
                 continue
             cx, cy = cells_of(e.box, scene.ratio, n)
             axis, have = _span(e, tag, cx, cy)
-            if have + 1e-9 >= need:
+            if have + CELL_TOL >= need:
                 continue
             x, y, w, h = e.box
             if axis == "x":

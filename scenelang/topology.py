@@ -132,6 +132,33 @@ def no_softlock(scene, spawn: str, goal: str) -> tuple[bool, str]:
     return False, f"softlock: de {ns} só se alcança {', '.join(sorted(reached))}; " + ("; ".join(why) or f"{ng} não tem aresta de entrada")
 
 
+def requires(scene, a: str, b: str, key: str) -> tuple[bool, str]:
+    """`key` é obrigatória para ir de a até b? Verdadeiro se b é alcançável com todas as chaves, mas NÃO sem `key`
+    (qualquer atalho que contorne a trava faz o predicado falhar)."""
+    na, nb = node_of(scene, a), node_of(scene, b)
+    if na is None or nb is None:
+        return False, f"{a if na is None else b} não está em nenhum nó do grafo"
+    keys = {e["unlocked_by"] for e in edges(scene.data) if e.get("kind") == "locked" and e.get("unlocked_by")}
+    if key not in keys:
+        return False, f"{key} não abre nenhuma passagem do grafo"
+
+    def reach(blocked: str | None) -> set[str]:
+        unlocked: set[str] = set()
+        while True:
+            reached = _bfs(scene.data, na, unlocked)
+            found = {k for k in keys if k != blocked and k in scene.by_id and node_of(scene, k) in reached}
+            if found <= unlocked:
+                return reached
+            unlocked |= found
+
+    if nb not in reach(None):
+        return False, f"{nb} nem é alcançável com todas as chaves (veja no_softlock)"
+    without = reach(key)
+    if nb in without:
+        return False, f"{key} NÃO é obrigatória: {nb} é alcançável sem ela (existe um atalho que contorna a trava)"
+    return True, f"sem {key}, de {na} só se alcança {', '.join(sorted(without))}; {nb} exige a chave"
+
+
 def max_paths(scene, a: str, b: str) -> tuple[int, str]:
     """Rotas independentes (sem arestas em comum) entre dois nós: fluxo máximo com capacidade 1 por aresta (teorema de Menger)."""
     na, nb = node_of(scene, a), node_of(scene, b)
