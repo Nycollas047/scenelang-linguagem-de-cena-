@@ -16,4 +16,4 @@ O repositório é público e licenciado sob MIT. Você pode baixar o projeto e u
 
 Não há suporte individual nem garantia de resposta. Consulte a documentação pública ou use uma IA de sua escolha com o código. Defeitos reproduzíveis podem ser registrados no [rastreador público de issues](https://github.com/Nycollas047/scenelang-linguagem-de-cena-/issues). É necessário entrar no GitHub para abrir uma issue; não há promessa de triagem ou resposta.
 
-Consulte a [política de privacidade](PRIVACY.md) e os [termos de uso](TERMS.md).
+Consulte a [política de privacidade](PRIVACY-SCENELANG-ASSISTANT.md) e os [termos de uso](TERMS-SCENELANG-ASSISTANT.md).
