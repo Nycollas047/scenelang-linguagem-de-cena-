@@ -381,3 +381,14 @@ def test_guides_so_com_metricas_nao_emite_proporcao_de_personagem():
     out = api.compile_scene(txt, "prose")
     text = out["prompt"] if isinstance(out, dict) and "prompt" in out else str(out)
     assert "queixo" not in text and "topo da cabeça" not in text
+
+
+def test_prompt_de_personagem_nao_usa_ponta_base_nem_a_o():
+    """Achados no teste Dark Souls: 'a o guardião' e 'com a ponta … e a base …' para quem só olha para um lado."""
+    from pathlib import Path
+    from scenelang import api
+    txt = Path("examples/dark_fantasy_chefe.yaml").read_text(encoding="utf-8")
+    out = api.compile_scene(txt, "prose")
+    text = out["prompt"] if isinstance(out, dict) and "prompt" in out else str(out)
+    assert " a o " not in text and "ponta" not in text.split("CENA:")[1].split("INTERAÇÕES")[0].split("guardião colossal,")[0]
+    assert "não se sobrepõe ao guardião colossal" in text

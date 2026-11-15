@@ -38,6 +38,14 @@ def de(label: str) -> str:
     return "de " + label
 
 
+def ao(label: str) -> str:
+    """Contração de 'a' com o artigo: 'o guardião' -> 'ao guardião'."""
+    for art, con in (("as ", "às "), ("os ", "aos "), ("a ", "à "), ("o ", "ao ")):
+        if label.startswith(art):
+            return con + label[len(art):]
+    return "a " + label
+
+
 def em(label: str) -> str:
     """Contração de 'em' com o artigo: 'a lança' -> 'na lança'."""
     for art, con in (("as ", "nas "), ("os ", "nos "), ("a ", "na "), ("o ", "no ")):
@@ -127,13 +135,14 @@ def entity_position(entity, grid_kind: str) -> str:
     """Onde a entidade está. Objetos orientados são descritos por ponta e base."""
     from . import layout as L
 
-    if entity.orient and V.DIRECTIONS[entity.orient] != (0, 0):
+    # em personagem e criatura `orient` é para onde ela olha, não um eixo ponta-base: vale o centro
+    if entity.orient and V.DIRECTIONS[entity.orient] != (0, 0) and entity.kind not in ("character", "creature"):
         tip = L.anchor_xy(entity.box, entity.orient, "tip")
         base = L.anchor_xy(entity.box, entity.orient, "base")
-        return (
-            f"com a ponta {position_of_point(grid_kind, tip)} "
-            f"e a base {position_of_point(grid_kind, base)}"
-        )
+        where_tip, where_base = position_of_point(grid_kind, tip), position_of_point(grid_kind, base)
+        if where_tip == where_base:
+            return where_tip
+        return f"com a ponta {where_tip} e a base {where_base}"
     # grade áurea: centro colado num ponto de interesse (<= 0.06) descreve o próprio ponto, em vez de «no centro»
     return position_of_point(grid_kind, entity.center, tol=0.06 if grid_kind == "golden" else 0.0)
 
@@ -184,7 +193,10 @@ def assert_texts(scene, a) -> tuple[str, str]:
             t = f"{cap(tp(0))} fica protegido da visão de {tp(1)} por um elemento sólido entre eles."
         return (t, t.rstrip(".") + "?")
     if n == "no_overlap":
-        t = f"Nenhum elemento de «{args[0]}» se sobrepõe a elementos de «{args[1]}»."
+        def _grp(i):      # entidade: pelo nome dela; etiqueta ou tipo: «cru», como o autor escreveu
+            return tp(i) if args[i] in scene.by_id else f"«{args[i]}»"
+        t = (f"{cap(_grp(0))} não se sobrepõe {ao(_grp(1))}." if args[0] in scene.by_id and args[1] in scene.by_id
+             else f"Nenhum elemento de {_grp(0)} se sobrepõe a elementos de {_grp(1)}.")
         return (t, t.rstrip(".") + "?")
     if n == "clearance":
         t = f"Entre {tp(0)} e {tp(1)} sobra passagem livre de pelo menos {float(args[2]) * 100:.0f}% da altura do quadro."

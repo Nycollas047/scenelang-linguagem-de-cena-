@@ -1,0 +1,118 @@
+scene: "O Guardião das Cinzas"
+canvas: {ratio: "16:9"}
+grid: {kind: thirds}
+style:
+  base: arte conceitual de dark fantasy para um jogo de ação difícil, pintura digital realista e suja, paleta dessaturada de cinza, ferrugem e brasa
+camera: {angle: low, lens: wide}
+intent:
+  emotion: "opressão, solidão, coragem teimosa"
+  story: "um cavaleiro minúsculo e ferido enfrenta um guardião colossal na arena em ruínas, diante do portão de névoa"
+  focal: boss.head
+atmosphere:
+  mood: {name: ominous, level: high}
+  weather: fog
+  wind: {direction: left, strength: low}
+safe_zones:
+  - id: area_titulo
+    box: [0.04, 0.04, 0.34, 0.16]
+    rule: background_only
+    purpose: "espaço escuro e limpo para o título do jogo"
+glossary:
+  pillar: pilares
+asserts:
+  - left_of(knight, boss)
+  - below(knight, boss)
+  - visible(knight)
+  - visible(boss)
+  - focal_single
+  - no_overlap(knight, boss)
+  - line_of_sight(knight, boss)
+  - near(knight, bonfire, 0.3)
+  - above(fog_gate, arena)
+  - clear_zone(area_titulo)
+  - count(pillar) == 2
+entities:
+  - id: sky
+    kind: sky
+    label: o céu
+    desc: céu coberto de nuvens pesadas cor de chumbo, com uma fresta de luz fraca sobre o portão
+    plane: background
+    box: [0.0, 0.0, 1.0, 0.68]
+    brightness: low
+  - id: arena
+    kind: terrain
+    label: a arena
+    desc: piso de lajes rachadas e cinzas, com poças de água escura e ossos espalhados
+    plane: foreground
+    box: [0.0, 0.66, 1.0, 0.34]
+    brightness: low
+  - id: fog_gate
+    kind: effect
+    label: o portão de névoa
+    desc: parede vertical de névoa branca e translúcida dentro de um arco de pedra em ruínas, no fundo da arena
+    plane: background
+    box: [0.44, 0.22, 0.2, 0.44]
+    brightness: high
+  - id: pillar_1
+    kind: structure
+    label: o pilar quebrado da esquerda
+    desc: pilar de pedra partido pela metade, coberto de musgo seco
+    plane: midground
+    box: [0.16, 0.2, 0.07, 0.5]
+    tags: [pillar]
+    brightness: low
+  - id: pillar_2
+    kind: structure
+    label: o pilar quebrado da direita
+    desc: pilar de pedra partido, inclinado, com correntes enferrujadas penduradas
+    plane: midground
+    box: [0.88, 0.16, 0.07, 0.54]
+    tags: [pillar]
+    brightness: low
+  - id: boss
+    kind: creature
+    label: o guardião colossal
+    desc: gigante de armadura negra corroída, mais alto que os pilares, com elmo sem rosto e olhos de brasa, ombros largos e capa esfarrapada, de pé no centro-direita e olhando para a esquerda, para o cavaleiro
+    plane: midground
+    box: [0.5, 0.06, 0.34, 0.74]
+    orient: left
+    brightness: max
+    saturation: high
+  - id: boss_sword
+    kind: prop
+    label: a espada colossal
+    desc: espada de ferro negro do tamanho de um poste, riscada de brasa, erguida sobre a cabeça do guardião
+    plane: midground
+    box: [0.74, 0.0, 0.1, 0.4]
+    brightness: high
+  - id: knight
+    kind: character
+    label: o cavaleiro
+    desc: cavaleiro minúsculo de armadura de placas arranhada, elmo aberto e capa curta, ferido, de escudo erguido na frente do corpo e espada curta na mão direita, olhando para o guardião à direita
+    plane: foreground
+    box: [0.22, 0.62, 0.09, 0.26]
+    orient: right
+    brightness: normal
+    pose:
+      preset: guard
+    character:
+      age_group: adult
+      body: {build: athletic}
+  - id: sword
+    kind: prop
+    label: a espada curta do cavaleiro
+    desc: espada reta de aço fosco, com a lâmina baixa e pronta
+    plane: foreground
+    box: [0.29, 0.7, 0.03, 0.1]
+  - id: bonfire
+    kind: light_source
+    label: a fogueira
+    desc: fogueira de espada cravada num monte de cinzas, com chamas laranja pequenas e fagulhas, atrás do cavaleiro
+    plane: midground
+    box: [0.08, 0.7, 0.07, 0.12]
+    brightness: high
+interactions:
+  - {from: knight.right_hand, verb: "empunha", to: sword}
+  - {from: knight, verb: "encara", to: boss}
+  - {from: boss.right_hand, verb: "ergue sobre a cabeça", to: boss_sword}
+  - {from: boss, verb: "encara", to: knight}
