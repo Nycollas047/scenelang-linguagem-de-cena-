@@ -132,3 +132,62 @@ def test_cli_ciclo_basico(tmp_path):
     r = run("status", d, "--json")
     assert r.returncode == 0 and json.loads(r.stdout)["telas"][0]["id"] == "tela_um"
     assert run("status", str(tmp_path / "nada")).returncode == 2
+
+
+def test_export_dataset_registro_autocontido(tmp_path):
+    d = _novo(tmp_path)
+    PJ.add_screen(d, "t")
+    _cena_dois_blocos(d)
+    img = tmp_path / "x.png"
+    Image.new("RGB", (200, 100), "gray").save(img)
+    boxes = {"a": [0.1, 0.4, 0.2, 0.2], "b": [0.6, 0.4, 0.2, 0.2]}
+    PJ.record_round(d, "t", img, boxes, label="A")
+    PJ.record_round(d, "t", img, boxes, label="B")
+    recs, warns = PJ.export_dataset(d)
+    assert not warns and [r["rodada"] for r in recs] == [1, 2]
+    r = recs[0]
+    assert r["formato"] == "scenelang.dataset/1" and r["tela"] == "t"
+    assert "left_of(a, b)" in r["cena_yaml"] and r["prompt"].strip()
+    assert r["imagem"]["tamanho"] == [200, 100] and len(r["imagem"]["sha256"]) == 64
+    assert r["anotacao"]["caixas"] == "informadas"
+    assert any(m["check"].startswith("left_of") and m["ok"] and m["source"] == "informada" for m in r["medicoes"])
+    json.dumps(r)                                        # serializável
+
+
+def test_export_pula_rodada_antiga_e_avisa(tmp_path):
+    d = _novo(tmp_path)
+    PJ.add_screen(d, "t")
+    (d / "relatorios" / "t" / "rodada-01").mkdir(parents=True)
+    recs, warns = PJ.export_dataset(d)
+    assert recs == [] and warns and "rodada-01" in warns[0]
+
+
+def test_cli_export(tmp_path):
+    d = tmp_path / "e"
+    PJ.init(d)
+    PJ.add_screen(d, "t")
+    r = subprocess.run([sys.executable, "-m", "scenelang", "project", "export", str(d)], capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 2 and "--out" in r.stderr
+    out = tmp_path / "d.jsonl"
+    r = subprocess.run([sys.executable, "-m", "scenelang", "project", "export", str(d), "--out", str(out)], capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0 and out.read_text() == ""
+
+
+def test_prompt_real_e_origem_ficam_registrados(tmp_path):
+    d = _novo(tmp_path)
+    PJ.add_screen(d, "t")
+    _cena_dois_blocos(d)
+    img = tmp_path / "x.png"
+    Image.new("RGB", (100, 100), "gray").save(img)
+    box = {"a": [0.1, 0.4, 0.2, 0.2], "b": [0.6, 0.4, 0.2, 0.2]}
+    pf = tmp_path / "meu.txt"
+    pf.write_text("prompt escrito à mão", encoding="utf-8")
+    PJ.record_round(d, "t", img, box, "A", pf, "gerador-x 2026-11")
+    PJ.record_round(d, "t", img, box, "B")
+    a, b = PJ.export_dataset(d)[0]
+    assert a["prompt"] == "prompt escrito à mão" and a["prompt_origem"] == "informado"
+    assert a["gerador"] == "gerador-x 2026-11" and b["gerador"] is None
+    assert b["prompt_origem"] == "compilado_da_cena_assumido" and b["prompt"] != a["prompt"]
+    with pytest.raises(PJ.ProjectError, match="arquivo de prompt"):
+        PJ.record_round(d, "t", img, box, "C", tmp_path / "nao.txt")
+    assert len(PJ.export_dataset(d)[0]) == 2 and len(list((d / "relatorios" / "t").glob("rodada-*"))) == 2   # nada pela metade

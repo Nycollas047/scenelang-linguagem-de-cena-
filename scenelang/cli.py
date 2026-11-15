@@ -394,13 +394,22 @@ def cmd_project(a) -> int:
             print(f"tela {a.id!r} criada em {p} e registrada no índice")
         elif a.action == "round":
             boxes = _json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None
-            res = PJ.record_round(a.dir, a.id, a.image, boxes, a.label)
+            res = PJ.record_round(a.dir, a.id, a.image, boxes, a.label, a.prompt_file, a.generator)
             print(f"rodada {res['rodada']} guardada em {res['pasta']}")
             print(f"imagem guardada em {res['imagem_guardada']}")
             for f in res.get("findings", []):
                 print(("✓ " if f["ok"] else "✗ ") + f["check"] + "  " + f["detail"])
             if res.get("corrections"):
                 print("correções para a próxima rodada:\n" + "\n".join(f"  - {c}" for c in res["corrections"]))
+        elif a.action == "export":
+            if not a.out:
+                print("erro: `project export` precisa de --out ARQUIVO.jsonl", file=sys.stderr)
+                return 2
+            recs, warns = PJ.export_dataset(a.dir)
+            Path(a.out).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs), encoding="utf-8")
+            for w in warns:
+                print(f"aviso: {w}", file=sys.stderr)
+            print(f"{len(recs)} registro(s) gravado(s) em {a.out}")
         else:
             st = PJ.status(a.dir)
             if a.json:
@@ -695,11 +704,12 @@ def main(argv: list[str] | None = None) -> int:
     s.set_defaults(fn=cmd_pose)
 
     s = sub.add_parser("project", help="espaço de trabalho: onde cada tela mora, o que já foi medido e o que falta")
-    s.add_argument("action", choices=["init", "add", "layer", "status", "round"])
+    s.add_argument("action", choices=["init", "add", "layer", "status", "round", "export"])
     s.add_argument("dir"); s.add_argument("id", nargs="?")
     s.add_argument("image", nargs="?")
     s.add_argument("--name"); s.add_argument("--goal"); s.add_argument("--layer"); s.add_argument("--note"); s.add_argument("--desc")
-    s.add_argument("--boxes"); s.add_argument("--label"); s.add_argument("--json", action="store_true")
+    s.add_argument("--boxes"); s.add_argument("--label"); s.add_argument("--json", action="store_true"); s.add_argument("--out"); s.add_argument("--generator", help="gerador e versão (ex.: nome-do-modelo 2026-11); sem isso o dado fica sem proveniência")
+    s.add_argument("--prompt-file", help="o prompt realmente usado (sem ele, grava o compilado e marca como assumido)")
     s.set_defaults(fn=cmd_project)
 
     s = sub.add_parser("correct", help="mede a imagem, grava o relatório e prepara o prompt da próxima rodada")

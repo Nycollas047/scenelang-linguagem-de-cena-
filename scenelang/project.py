@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 import yaml
+from PIL import Image
 
 INDEX = "projeto.yaml"
 SLUG = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -25,6 +26,8 @@ SCREEN_KEYS = {"id", "arquivo", "camada", "nota"}
 LAYER_KEYS = {"id", "desc"}
 DIRS = ("telas", "refs", "relatorios")
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
+META_FORMAT = "scenelang.rodada/1"
+DATASET_FORMAT = "scenelang.dataset/1"
 
 STUB = """scene: "{title}"
 canvas: {{ratio: "16:9"}}
@@ -263,7 +266,8 @@ def status(root: str | Path) -> dict:
     return {"projeto": data.get("projeto"), "objetivo": data.get("objetivo"), "problemas": problems, "telas": shown, "em_dia": em_dia}
 
 
-def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | None = None, label: str | None = None) -> dict:
+def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | None = None, label: str | None = None,
+                 prompt_file: str | Path | None = None, generator: str | None = None) -> dict:
     """Mede a imagem de uma tela e guarda tudo: cópia em refs/, relatório e prompt seguinte em relatorios/."""
     from . import api
 
@@ -278,6 +282,8 @@ def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | No
     image = Path(image)
     if not image.is_file():
         raise ProjectError(f"não achei a imagem {image}")
+    if prompt_file is not None and not Path(prompt_file).is_file():      # antes de medir: não deixar rodada pela metade
+        raise ProjectError(f"não achei o arquivo de prompt {prompt_file}")
     n = len(_rounds(root, sid)) + 1
     out = root / "relatorios" / sid / f"rodada-{n:02d}"
     res = api.correct_round(scene_path.read_text(encoding="utf-8"), str(image), str(out), boxes)
@@ -290,7 +296,65 @@ def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | No
     tag = f"-{re.sub(r'[^a-z0-9_]+', '_', label.lower())}" if label else ""
     dest = refs / f"rodada-{n:02d}{tag}{image.suffix.lower()}"
     shutil.copyfile(image, dest)
+    # o que foi medido fica autocontido: a cena e o prompt DAQUELA rodada, a imagem (com hash) e de onde vieram as caixas
+    import hashlib
+    import json
+
+    text = scene_path.read_text(encoding="utf-8")
+    (out / "cena.yaml").write_text(text, encoding="utf-8")
+    if prompt_file is not None:
+        pf = Path(prompt_file)
+        if not pf.is_file():
+            raise ProjectError(f"não achei o arquivo de prompt {pf}")
+        prompt, origem = pf.read_text(encoding="utf-8"), "informado"
+    else:                       # sem o prompt real, grava o compilado e DIZ que é suposição
+        prompt, origem = api.compile_scene(text, "prose").get("output", ""), "compilado_da_cena_assumido"
+    (out / "prompt.txt").write_text(prompt, encoding="utf-8")
+    if boxes:
+        (out / "caixas.json").write_text(json.dumps(boxes, ensure_ascii=False, indent=2), encoding="utf-8")
+    with Image.open(image) as im:
+        size = list(im.size)
+    (out / "rodada.json").write_text(json.dumps({
+        "formato": META_FORMAT, "tela": sid, "rodada": n, "rotulo": label,
+        "imagem": str(dest.relative_to(root)), "imagem_sha256": hashlib.sha256(image.read_bytes()).hexdigest(), "imagem_tamanho": size,
+        "caixas": "informadas" if boxes else "nenhuma", "prompt_origem": origem, "gerador": generator}, ensure_ascii=False, indent=2), encoding="utf-8")
     res["rodada"] = n
     res["imagem_guardada"] = str(dest)
     res["pasta"] = str(out)
     return res
+
+
+def export_dataset(root: str | Path) -> tuple[list[dict], list[str]]:
+    """Um registro autocontido por rodada medida: cena, prompt, imagem (hash), medições, correções e o prompt seguinte.
+
+    Rodadas sem `rodada.json` (feitas antes desta versão) são puladas e listadas em `avisos`.
+    """
+    import json
+
+    root = Path(root)
+    data = _read_index(root)
+    records, warns = [], []
+    for t in data.get("telas") or []:
+        if not isinstance(t, dict) or not isinstance(t.get("id"), str):
+            continue
+        sid = t["id"]
+        for r in _rounds(root, sid):
+            meta_f, rep_f = r / "rodada.json", r / "relatorio.json"
+            if not (meta_f.is_file() and rep_f.is_file()):
+                warns.append(f"{r.relative_to(root)}: sem rodada.json/relatorio.json (rodada antiga ou incompleta); pulada")
+                continue
+            meta, rep = json.loads(meta_f.read_text(encoding="utf-8")), json.loads(rep_f.read_text(encoding="utf-8"))
+            nxt = r / "prompt_next.txt"
+            records.append({
+                "formato": DATASET_FORMAT, "projeto": data.get("projeto"), "tela": sid, "camada": t.get("camada"),
+                "rodada": meta["rodada"], "rotulo": meta.get("rotulo"), "gerador": meta.get("gerador"),
+                "cena_hash": rep.get("hash_cena_completo"), "cena_yaml": (r / "cena.yaml").read_text(encoding="utf-8"),
+                "prompt": (r / "prompt.txt").read_text(encoding="utf-8"), "prompt_origem": meta.get("prompt_origem", "desconhecida"),
+                "imagem": {"caminho": meta["imagem"], "sha256": meta["imagem_sha256"], "tamanho": meta["imagem_tamanho"]},
+                "anotacao": {"caixas": meta.get("caixas"), "observacao": "caixas 'informadas' vêm de quem olhou a imagem, não de um detector"},
+                "medicoes": [{k: m.get(k) for k in ("check", "ok", "detail", "source", "confidence", "classe")} for m in rep.get("medicoes") or []],
+                "nao_medidos": rep.get("nao_medidos"),
+                "correcoes": rep.get("correcoes"),
+                "prompt_seguinte": nxt.read_text(encoding="utf-8") if nxt.is_file() else None,
+            })
+    return records, warns

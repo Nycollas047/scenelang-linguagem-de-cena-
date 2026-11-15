@@ -1,14 +1,21 @@
-# scenelang — linguagem de programação para descrição de imagens
+# scenelang — a declarative scene language for image generation
 
-> A cena é o código-fonte; o prompt é o binário.
+> 🇧🇷 [Versão em português](README.pt-BR.md) · English (this page)
 
-**scenelang** é uma linguagem declarativa (YAML) para descrever uma imagem como uma cena estruturada.
-Um compilador transforma a cena em prompt para qualquer modelo de imagem; verificadores em código
-medem o resultado. A linguagem declara a intenção e o modelo tenta: cada falha medida é dado de avaliação e de treino.
+> The scene is the source code; the prompt is the binary.
 
-![Esquema 2D da cena de exemplo](docs/guardia-esquema.png)
+**scenelang** is a declarative language (YAML) that describes an image as a structured scene. A compiler turns the
+scene into a prompt for any image model; code-based verifiers measure the result. The language **declares intent and
+lets the model try**: every measured failure becomes a structured record
+(see [`docs/DATA.md`](docs/DATA.md) — what is recorded, and what is **not** proven).
 
-## Instalação
+![2D schematic of the example scene](docs/guardia-esquema.png)
+
+**Status: v0.9, experimental.** Evidence so far is small and author-run; see [Status](#status).
+Language note: scene vocabulary and generated prompts are in Portuguese; the CLI messages are Portuguese too.
+The YAML keys, the docs in `README.md` / `docs/DATA.md` and the code are English-friendly; translating the rest is open work.
+
+## Install
 
 ```
 pip install -e .[dev]
@@ -16,108 +23,125 @@ scenelang validate examples/guardia.yaml
 scenelang compile examples/guardia.yaml --target prose
 ```
 
-## Como as peças se encaixam
+## How the pieces fit
 
 ```
-cena.yaml ─► expand (at, preset, auto_asserts, safe_zones) ─► validate ─► IR ─┬─► prose / compact / json / regions ─► modelo de imagem
-   ▲                                                                          │        (relatório de perdas por destino)
-   │                                                                          ├─► render (esquema 2D · planta baixa)
-   │                                                                          ├─► pack (prompt + guia, manifesto com hash)
-   │                                                                          └─► level (mermaid · tiled · godot · unity)
+scene.yaml ─► expand (at, preset, auto_asserts, safe_zones) ─► validate ─► IR ─┬─► prose / compact / json / regions ─► image model
+   ▲                                                                           │      (loss report per target)
+   │                                                                           ├─► render (2D schematic · floor plan)
+   │                                                                           ├─► pack (prompt + guide, manifest with hash)
+   │                                                                           └─► level (mermaid · tiled · godot · unity)
    │
-   └── correct ◄── Finding ◄── verify / locate (imagem) ── medição com confiança ── diff · patch · delta-prompt (edição incremental)
-        (regra por falha, histórico, escalada, adiamento se a evidência é fraca)
+   └── correct ◄── Finding ◄── verify / locate (image) ── measurement with confidence ── diff · patch · delta-prompt
+        (one rule per failure, history, escalation, deferral when evidence is weak)
+
+project/  projeto.yaml · telas/ · refs/ · relatorios/  ──►  scenelang project export  ──►  data.jsonl
 ```
 
-![Planta baixa do exemplo de level design](docs/santuario-planta.png)
+![Floor plan of the level-design example](docs/santuario-planta.png)
 
-## Camadas da linguagem
+## The three loops
 
-| Camada | Chaves | O que controla |
+| Loop | Commands | What you get |
 |---|---|---|
-| Quadro e grade | `canvas` (rect/circle/ellipse, `pixel_grid`), `grid` (áurea, terços) | formato, grade de pixels, pontos de interesse |
-| Entidades | `entities` (box/at, `orient`, `brightness`, `saturation`) | posição, plano, direção, foco |
-| Cor | `colors`, `palette` (`mode: fixed\|model_picks`, RGB/CMYK/HSL, harmonia, contraste) | cores exatas ou escolhidas pelo modelo |
-| Guias | `guides` (cânone de cabeças, eixo, linhas, margem; `model_proposes`) | proporção e consistência |
-| Fundo | `background` (`chromakey`, `alpha: chroma\|difference`) | recorte e canal alfa |
-| Atmosfera | `atmosphere` (mood, clima, vento), `wind_parts` | coerência entre objetos leves e o vento |
-| Materiais | `materials`, `material`/`parts` (tecido, trama, caimento, escamas), `detail` | textura por parte e orçamento de detalhe |
-| Personagem | `entities[].character` (idade, herança, tom de pele, cabelo, olhos, rosto, corpo, partes) | biotipo descrito atributo por atributo, sem inferências |
-| Intenção e olhar | `intent`, `gaze`, `lights`, `camera` | foco e ordem de leitura |
-| Verificação | `asserts` (layout), `verify` (imagem) | critérios mensuráveis |
-| Reuso | `extends`, `import`, `lock` | variantes, bibliotecas e partes travadas |
-| Atalhos (v0.8) | `at` relativo, `auto_asserts`, `pose.preset` | posição por relação, ordem inferida das caixas, pose-base com ajuste fino |
-| Relações (v0.8) | `interactions`, `safe_zones` | como duas entidades interagem; onde NÃO pode haver elementos |
-| Pose (v0.7) | `pose` em graus, perfil anatômico, rig (`unity_humanoid`, `mixamo`) | manequim e frases de pose por junta |
-| Level design (v0.9) | `graph`, `flow`, `guides.metrics`, predicados de visão/folga/alcançabilidade | mapas, interiores, rotas, cones de visão, softlock |
+| **Declare** | `validate`, `check`, `render` | A scene whose constraints are checked on the layout *before* any image exists. |
+| **Measure** | `pack`, `locate`, `verify`, `correct` | The generated image is measured per constraint (pass / fail / **not measured**), and the next prompt is built from the failures. |
+| **Record** | `project round`, `project export` | One self-contained JSONL record per round: scene, prompt, image hash, per-constraint results, corrections. |
 
-Referência de vocabulário: [`docs/LANGUAGE.md`](docs/LANGUAGE.md).
+## Language layers
 
-Representação independente de destino (experimental): [`docs/UNIVERSAL_SCENE_IR.md`](docs/UNIVERSAL_SCENE_IR.md).
+| Layer | Keys | Controls |
+|---|---|---|
+| Canvas and grid | `canvas` (rect/circle/ellipse, `pixel_grid`), `grid` (golden, thirds) | shape, pixel grid, points of interest |
+| Entities | `entities` (box/`at`, `orient`, `brightness`, `saturation`) | position, plane, direction, focus |
+| Color | `colors`, `palette` (`fixed` or `model_picks`, RGB/CMYK/HSL, harmony, contrast) | exact or model-chosen colors |
+| Guides | `guides` (head-count canon, axis, lines, margin; `model_proposes`) | proportion and consistency |
+| Background | `background` (`chromakey`, `alpha: chroma\|difference`) | cut-out and alpha channel |
+| Atmosphere | `atmosphere` (mood, weather, wind), `wind_parts` | coherence between light objects and wind |
+| Materials | `materials`, `material`/`parts` (fabric, weave, drape, scales), `detail` | per-part texture and detail budget |
+| Character | `entities[].character` (age, heritage, skin tone, hair, eyes, face, body, parts) | attribute-by-attribute body description, no inference |
+| Intent and gaze | `intent`, `gaze`, `lights`, `camera` | focus and reading order |
+| Verification | `asserts` (layout), `verify` (image) | measurable criteria |
+| Reuse | `extends`, `import`, `lock` | variants, libraries, locked parts |
+| Shortcuts (v0.8) | relative `at`, `auto_asserts`, `pose.preset` | placement by relation, order inferred from boxes, base pose with fine tuning |
+| Relations (v0.8) | `interactions`, `safe_zones` | how two entities interact; where nothing may appear |
+| Pose (v0.7) | `pose` in degrees, anatomical profile, rigs (`unity_humanoid`, `mixamo`) | mannequin and per-joint pose phrases |
+| Level design (v0.9) | `graph`, `flow`, `guides.metrics`, visibility / clearance / reachability predicates | maps, interiors, routes, sight cones, softlock |
+| Workspace | `project` | where each screen lives, what was measured, what is next |
 
-## Comandos
+Vocabulary reference: [`docs/LANGUAGE.md`](docs/LANGUAGE.md) (Portuguese).
+Target-independent representation (experimental): [`docs/UNIVERSAL_SCENE_IR.md`](docs/UNIVERSAL_SCENE_IR.md).
 
-| Comando | O que faz |
+## Commands
+
+| Command | What it does |
 |---|---|
-| `validate CENA [--json]` | Valida tudo numa passada, com caminho, valores aceitos e "você quis dizer…". |
-| `compile CENA --target prose\|json\|regions [--pass black\|white]` | Compila a cena. Negações viram afirmações. |
-| `check CENA` | Avalia os asserts de layout (sem imagem). |
-| `render CENA --out F.png` | Esquema 2D: grade, caixas, orientação, guias, olhar, foco. |
-| `plan CENA` / `plan-apply CENA PROPOSTA` | Pedido estruturado ao modelo (cores e guias) e gravação da proposta, já validada. |
-| `verify CENA IMAGEM` | Mede a imagem: cores, grade de pixels, simetria, guias, paleta, fundo, vazamento. |
-| `cutout CENA IMAGEM --out F.png` / `cutout --black B --white W --out F.png` | PNG com alfa (por chave ou por diferença de duas passadas). |
-| `sweep CENA --axis caminho=v1,v2,v3 --out DIR` / `sweep-score FICHA` | Variantes que mudam um eixo só; mede se a imagem seguiu a ordem. |
-| `eval-form` / `eval-apply [--lock-passed]` | Ficha de avaliação, reforço do que falhou e trava do que passou. |
-| `snap CENA IMAGEM --out F.png [--grid N --colors N --to-palette --fit]` | Pixel art de verdade: grade, cores, paleta exata, encaixe nas guias, fundo transparente. |
-| `sheet-prompt` / `sheet-measure` | Variantes lado a lado num prompt só e medida de cada coluna. |
-| `primer` / `vocab [--json]` / `new [modelo]` | Cartilha de uma página, vocabulários e cenas iniciais para o modelo escrever cenas. |
-| `compile … --target compact --token-budget N` | Poda o prompt por prioridade até caber em N tokens e declara o que saiu como perda. |
-| `pack CENA [--strict --guide-style blocks\|seg]` / `unpack --check` | Prompt + guia (ou PNG único) com manifesto e hash canônico; confere a integridade na volta. |
-| `locate` / `correct` | Localiza entidades na imagem (5 estados, com confiança) e gera o próximo prompt de correção, com histórico. |
-| `diff` / `patch` / `delta-prompt` | Compara cenas, aplica edições endereçadas e escreve só o prompt do que mudou. |
-| `pose --export unity_humanoid\|mixamo` | Folha de pose e exportação de nomes de ossos (sem calibração). |
-| `render CENA --style floorplan` | Planta baixa: paredes duplas, portas, coberturas, rotas, cones, escala e grafo. |
-| `level CENA --export mermaid\|tiled\|godot\|unity` | Exporta o grafo e o blockout. |
-| `bench plan\|record\|report` | Estrutura de benchmark (convencional × completa × compacta × incremental); métricas offline. |
-| `scenelang-mcp` | Servidor MCP: o modelo escreve, valida, compila, mede e corrige sem copiar arquivos. Há também `skill/scenelang/SKILL.md`. |
-| `validate --fix [--out F]` | Aplica as correções seguras que o validador propõe (typos de valor e de campo). |
+| `validate SCENE [--json]` | Validates everything in one pass, with path, accepted values and "did you mean…". |
+| `compile SCENE --target prose\|json\|regions\|compact [--token-budget N]` | Compiles the scene. Negations become affirmations; the budget prunes by priority and declares what was dropped. |
+| `check SCENE` | Evaluates layout asserts (no image needed). |
+| `render SCENE --out F.png [--style floorplan]` | 2D schematic or floor plan: grid, boxes, orientation, routes, sight cones. |
+| `pack SCENE [--guide-style blocks\|seg]` / `unpack --check` | Prompt + composition guide with a hashed manifest; integrity check on the way back. |
+| `locate` / `correct` | Locate entities in the image (5 states, with confidence) and write the next correction prompt, with history. |
+| `verify SCENE IMAGE` | Measure the image: colors, pixel grid, symmetry, guides, palette, background, spill, quiet zones, walkable connectivity. |
+| `project init\|layer\|add\|status\|round\|export` | Workspace: where each screen lives, what is measured, what is next; `export` writes the dataset. |
+| `level SCENE --export mermaid\|tiled\|godot\|unity` | Export the graph and the blockout. |
+| `diff` / `patch` / `delta-prompt` | Compare scenes, apply addressed edits, write only the prompt of what changed. |
+| `bench plan\|record\|report` | Benchmark scaffolding (conventional × full × compact × incremental); offline metrics. |
+| `plan` / `plan-apply`, `eval-form` / `eval-apply`, `sweep`, `snap`, `cutout`, `sheet-*`, `pose` | Model-proposed colors and guides, evaluation forms, one-axis sweeps, true pixel art, alpha cut-outs, variant sheets, pose sheets. |
+| `primer` / `vocab` / `new` | One-page primer, vocabularies and starter scenes for a model writing scenes. |
+| `scenelang-mcp` | MCP server: a model can write, validate, compile, measure and correct without copying files. See also `skill/scenelang/SKILL.md`. |
 
-## Regras importantes
+## Conventions
 
-- Direções são do ponto de vista de quem vê a imagem (`left` = esquerda da tela), inclusive o vento.
-- Coordenadas normalizadas: x para a direita, y para baixo, `[0,1]`.
-- Pontos de interesse da grade saem com porcentagens ("a cerca de 38% da esquerda e 38% do topo"), porque os modelos leram "superior esquerdo da grade" como o canto do quadro.
-- Foco único: só um elemento com `brightness: max`; só um ponto com detalhe `max`.
-- CMYK → RGB é aproximado (sem perfil ICC); a cor impressa real depende do perfil.
-- Elementos translúcidos (vidro, fumaça, brilho) recortam mal por chave; use `alpha: difference`.
-- `eval-apply` regrava o YAML sem os comentários originais.
-- Os verificadores de imagem exigem Pillow e numpy (`pip install scenelang[image]`).
+- Directions are from the viewer's point of view (`left` = left of the screen), wind included.
+- Normalized coordinates: x to the right, y downward, in `[0, 1]`.
+- Grid points of interest are written with percentages, because models read "top-left of the grid" as the frame corner.
+- Single focus: only one element with `brightness: max`.
+- CMYK → RGB is approximate (no ICC profile).
+- Translucent elements (glass, smoke, glow) cut out poorly by key; use `alpha: difference`.
+- Image verifiers need Pillow and numpy (`pip install scenelang[image]`).
 
-## Exemplos
+## Examples
 
-- `examples/guardia.yaml` — splash art 16:9, grade áurea, 11 asserts.
-- `examples/emblema.yaml` — quadro circular, grade de terços, `count` com glossário.
-- `examples/pixel_heroi.yaml` — pixel art 32×32 com paleta escolhida pelo modelo, guias, chromakey, vento, materiais e 7 verificadores.
-- `examples/dragoa_e_cavaleira.yaml` — escrita por um modelo pequeno só com a cartilha: escamas com degradê, personagem com tom de pele, capa ao vento.
-- `scenelang new sprite|splash|emblem|character-sheet` — cenas iniciais que já validam sem avisos.
-- `examples/pixel_heroi_noite.yaml` — variante por `extends` + biblioteca de materiais + travas.
-- `examples/interior_santuario_level.yaml` — level design: grafo com porta trancada, rotas, cone de visão, métrica em células e 29 asserts (visão, cobertura, folga, softlock, caminhos independentes).
-- `examples/minecraft_dungeon_puzzle.yaml` — dungeon de quebra-cabeça para Minecraft (1 célula = 1 bloco, 3 puzzles encadeados por chaves, 54 asserts, `requires` e `no_softlock`).
+- `examples/guardia.yaml` — 16:9 splash art, golden grid, 11 asserts.
+- `examples/pixel_heroi.yaml` — 32×32 pixel art with a model-picked palette, guides, chromakey, wind, materials, 7 verifiers.
+- `examples/dragoa_e_cavaleira.yaml` — written by a small model using only the primer.
+- `examples/dark_fantasy_chefe.yaml` — boss-fight concept art: pose, interactions, quiet zone, atmosphere.
+- `examples/interior_santuario_level.yaml` — level design: graph with a locked door, routes, sight cone, 29 asserts.
+- `examples/minecraft_dungeon_puzzle.yaml` — Minecraft puzzle dungeon (1 cell = 1 block, 3 chained key puzzles, `requires`, `no_softlock`).
+- `examples/dataset/sample.jsonl` — 3 sample records of the data format (boxes estimated by the author; shows the **format**, not a result).
 
 ## Status
 
-**Versão 0.9 (experimental).** 428 testes passando, 4 ignorados (Python 3.15 neste checkout; a suíte ainda não foi executada em 3.10, o mínimo declarado). O IR universal está documentado como recurso experimental v1. Histórico: [`docs/AUDITORIA.md`](docs/AUDITORIA.md) (auditoria v0.5→v0.7), [`docs/LANGUAGE.md`](docs/LANGUAGE.md) (referência) e [`docs/UNIVERSAL_SCENE_IR.md`](docs/UNIVERSAL_SCENE_IR.md).
+**Version 0.9 (experimental).** 475 tests pass, 2 skipped (Python 3.15 in this checkout; the suite has not been run
+on 3.10, the declared minimum).
 
-**O que já foi medido**
-- Um teste de ponta a ponta com duas rodadas (relatório de campo, v0.7.1): na primeira, 5 de 6 restrições espaciais; após `correct`, 6 de 6. É **um caso**, não estatística.
-- `delta-prompt` reduziu um prompt de 6.625 para 442 caracteres numa edição pontual.
-- Defeitos reais achados e corrigidos pelos testes: manequim com sinais invertidos, hash não canônico, correção falsa por medição fraca por cor.
+**What has been measured (small, informal, author-run)**
+- Minecraft dungeon, 3 images per arm, visual comparison: prompts compiled from the scene, with a composition guide,
+  produced no invented UI panels (0/3) versus a hand-written prompt (3/3), and put the keys in the declared rooms (3/3).
+  The hand-written baseline was written by the same author and did not mention those items.
+- Boss-fight scene, 1 image per arm: compiled prompts reproduced per-entity details the hand-written prompt summarised
+  away (moss on one pillar, chains on the other); the composition guide gave no clear extra benefit there.
+- One end-to-end two-round test (v0.7.1): 5 of 6 spatial constraints on round one, 6 of 6 after `correct`. **One case**,
+  not statistics.
+- Real defects found and fixed by tests and fuzzing (malformed input crashing the validator; character-proportion lines
+  leaking into a map prompt).
 
-**O que ainda não está provado ou pronto**
-- O benchmark contra um gerador real **não foi executado**: não há número de redução de tentativas ou de custo. O prompt completo gasta mais tokens de entrada que um prompt ingênuo (~3,7× no exemplo do sapo mago; use `--token-budget` ou o destino `compact`).
-- `seg` desenha retângulos, não máscaras; localizar por cor é frágil (por isso o sistema recusa decidir quando a evidência é fraca).
-- Conversão de pose para rigs traz só os nomes dos ossos, sem calibração; o manequim tem proporções humanas.
-- Exportador Godot (`.tscn`) não foi aberto no Godot; LDtk não é suportado.
-- `safe_zones` aparece no esquema, mas ainda não no guia do `pack`.
+**What is not proven or not ready**
+- **No statistical result.** 1–3 images per condition, two scenes; the generator was not recorded in those runs. Boxes
+  were estimated by the author and are not independent.
+- **No model has been trained on this data.** Usefulness for training is a hypothesis; see [`docs/DATA.md`](docs/DATA.md).
+- The benchmark against a real generator has **not** been run at scale: there is no number for fewer attempts or lower
+  cost. The full prompt uses more input tokens than a naive one (~3.7× on the frog-mage example; use `--token-budget`
+  or the `compact` target).
+- `seg` draws rectangles, not masks; locating by color is fragile (the system refuses to decide when evidence is weak).
+- Pose-to-rig conversion carries bone names only, uncalibrated.
+- The Godot exporter (`.tscn`) has not been opened in Godot; LDtk is unsupported.
+- `safe_zones` appears in the schematic but not yet in the `pack` guide.
+- The workspace has no reusable components, no layers with order/visibility, and no UI vocabulary yet.
 
-A linguagem é neutra quanto a fornecedor e não contém mecanismos para contornar políticas de uso de modelos.
+The language is vendor-neutral and contains no mechanism to circumvent model usage policies.
+
+## License
+
+MIT.

@@ -379,7 +379,7 @@ def test_guides_so_com_metricas_nao_emite_proporcao_de_personagem():
     from scenelang import api
     txt = Path("examples/minecraft_dungeon_puzzle.yaml").read_text(encoding="utf-8")
     out = api.compile_scene(txt, "prose")
-    text = out["prompt"] if isinstance(out, dict) and "prompt" in out else str(out)
+    text = out["output"]
     assert "queixo" not in text and "topo da cabeça" not in text
 
 
@@ -389,6 +389,6 @@ def test_prompt_de_personagem_nao_usa_ponta_base_nem_a_o():
     from scenelang import api
     txt = Path("examples/dark_fantasy_chefe.yaml").read_text(encoding="utf-8")
     out = api.compile_scene(txt, "prose")
-    text = out["prompt"] if isinstance(out, dict) and "prompt" in out else str(out)
+    text = out["output"]
     assert " a o " not in text and "ponta" not in text.split("CENA:")[1].split("INTERAÇÕES")[0].split("guardião colossal,")[0]
     assert "não se sobrepõe ao guardião colossal" in text
