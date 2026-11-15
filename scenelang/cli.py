@@ -372,6 +372,63 @@ def cmd_pose(a) -> int:
     return 0
 
 
+def cmd_project(a) -> int:
+    import json as _json
+
+    from . import project as PJ
+
+    need = {"add": ("id",), "layer": ("id",), "round": ("id", "image")}.get(a.action, ())
+    for k in need:
+        if getattr(a, k) is None:
+            print(f"erro: `project {a.action}` precisa de {' e '.join(need)}", file=sys.stderr)
+            return 2
+    try:
+        if a.action == "init":
+            made = PJ.init(a.dir, a.name, a.goal or "")
+            print("projeto criado:\n" + "\n".join(f"  {p}" for p in made))
+        elif a.action == "layer":
+            PJ.add_layer(a.dir, a.id, a.desc or "")
+            print(f"camada {a.id!r} adicionada")
+        elif a.action == "add":
+            p = PJ.add_screen(a.dir, a.id, a.layer, a.note or "")
+            print(f"tela {a.id!r} criada em {p} e registrada no índice")
+        elif a.action == "round":
+            boxes = _json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None
+            res = PJ.record_round(a.dir, a.id, a.image, boxes, a.label)
+            print(f"rodada {res['rodada']} guardada em {res['pasta']}")
+            print(f"imagem guardada em {res['imagem_guardada']}")
+            for f in res.get("findings", []):
+                print(("✓ " if f["ok"] else "✗ ") + f["check"] + "  " + f["detail"])
+            if res.get("corrections"):
+                print("correções para a próxima rodada:\n" + "\n".join(f"  - {c}" for c in res["corrections"]))
+        else:
+            st = PJ.status(a.dir)
+            if a.json:
+                print(_json.dumps(st, ensure_ascii=False, indent=2, default=str))
+                return 0
+            print(f"projeto: {st['projeto']}\nobjetivo: {st['objetivo']}")
+            for pr in st["problemas"]:
+                print(f"[PROBLEMA] {pr}")
+            if not st["telas"]:
+                print("nenhuma tela ainda: use `scenelang project add <dir> <id>`")
+            for s in st["telas"]:
+                bits = ["válida" if s.get("valida") else "inválida"] if s.get("existe") else ["arquivo ausente"]
+                if "asserts" in s:
+                    bits.append(f"asserts {s['asserts_ok']}/{s['asserts']}")
+                bits.append(f"rodadas {s['rodadas']}")
+                if "medicoes" in s:
+                    bits.append(f"medições {s['medicoes_ok']}/{s['medicoes']}" + (f" ({s['nao_medidos']} sem medir)" if s.get("nao_medidos") else ""))
+                if s.get("desatualizada"):
+                    bits.append("DESATUALIZADA")
+                print(f"- {s['id']}" + (f" [{s['camada']}]" if s.get("camada") else "") + ": " + ", ".join(bits))
+                print(f"    próximo: {s.get('proximo')}")
+            print("em dia" if st["em_dia"] else "há o que fazer")
+    except PJ.ProjectError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_correct(a) -> int:
     from PIL import Image
 
@@ -636,6 +693,14 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--export", metavar="RIG", help="em vez do desenho, imprime a pose em JSON com os nomes de osso do rig (scenelang, unity_humanoid, mixamo)")
     s.add_argument("--calibration", metavar="JSON", help="calibração do rig: osso → eixo → {axis, sign, offset}; sem ela a saída vem marcada como não calibrada")
     s.set_defaults(fn=cmd_pose)
+
+    s = sub.add_parser("project", help="espaço de trabalho: onde cada tela mora, o que já foi medido e o que falta")
+    s.add_argument("action", choices=["init", "add", "layer", "status", "round"])
+    s.add_argument("dir"); s.add_argument("id", nargs="?")
+    s.add_argument("image", nargs="?")
+    s.add_argument("--name"); s.add_argument("--goal"); s.add_argument("--layer"); s.add_argument("--note"); s.add_argument("--desc")
+    s.add_argument("--boxes"); s.add_argument("--label"); s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_project)
 
     s = sub.add_parser("correct", help="mede a imagem, grava o relatório e prepara o prompt da próxima rodada")
     s.add_argument("scene"); s.add_argument("image")

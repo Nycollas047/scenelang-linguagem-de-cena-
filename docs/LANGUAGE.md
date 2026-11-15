@@ -241,3 +241,28 @@ Pensado para mapas, interiores e blockout; a cena é a planta (caixas normalizad
 - **`scenelang level CENA --export mermaid|tiled|godot|unity`**: Mermaid e JSONs (Tiled, Unity) são conferidos por testes; o `.tscn` do Godot **não foi aberto no Godot**. LDtk não é suportado (erro explícito). Alturas 3D por etiqueta/plano são convenção de blockout.
 - Exemplo completo: `examples/interior_santuario_level.yaml`.
 - `requires(origem, destino, chave)`: a chave é obrigatória? Falha se existe atalho que contorne a trava (e se a chave não abre nada ou o destino é inalcançável).
+
+## Espaço de trabalho do projeto (`scenelang project`)
+
+Para projetos com muitas telas, a pasta do projeto guarda onde cada tela mora e o que já foi medido:
+
+```
+projeto/
+├── projeto.yaml          índice: projeto, objetivo, camadas, telas
+├── LEIA-ME-LLM.md        o ciclo de trabalho em uma página (o LLM lê isto primeiro)
+├── telas/<id>.yaml       uma cena por tela (a fonte de verdade)
+├── refs/<id>/            imagens de referência (uma por rodada)
+└── relatorios/<id>/rodada-NN/   relatorio.json, cena.next.yaml, prompt_next.txt
+```
+
+| Comando | O que faz |
+|---|---|
+| `project init DIR [--name N] [--goal G]` | cria a estrutura; não sobrescreve um projeto existente |
+| `project layer DIR ID [--desc D]` | declara uma camada nomeada (grupo de telas) |
+| `project add DIR ID [--layer L] [--note N]` | cria `telas/ID.yaml` com uma cena inicial válida e a registra |
+| `project status DIR [--json]` | por tela: validade, asserts, rodadas, medições, DESATUALIZADA, e o próximo passo |
+| `project round DIR ID IMAGEM [--boxes J] [--label L]` | mede a imagem, guarda cópia em `refs/` e a rodada em `relatorios/` |
+
+O estado é derivado dos arquivos a cada `status` (nada é guardado em dobro). "Desatualizada" compara o hash canônico da
+cena de hoje com o da última medição, então reformatar ou mexer na data do arquivo não conta. Asserts sem medida
+aparecem como "sem medir" e impedem o "em dia". Ainda não há componentes reutilizáveis nem camadas com ordem/visibilidade.
