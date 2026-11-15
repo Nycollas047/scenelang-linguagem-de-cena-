@@ -122,3 +122,12 @@ def test_guia_seg_nao_tem_borda_nem_texto_e_o_prompt_proibe_vazar_o_guia():
     svg, _, _ = PK.guide_svg(load(), style="seg")
     assert "stroke=" not in svg.split("<g")[0] and "<text" not in svg
     assert "sem molduras" in PK.GUIDE_PREFACE and "sem elementos extras" in PK.GUIDE_PREFACE
+
+
+def test_preface_do_guia_so_fala_de_manequim_quando_ha_pose():
+    from scenelang import validate as V
+    from pathlib import Path
+    txt = Path("examples/minecraft_dungeon_puzzle.yaml").read_text(encoding="utf-8")
+    _, scene, _ = V.load_text(txt)
+    assert "manequim" not in PK.guide_preface(scene)
+    assert "manequim" in PK.GUIDE_PREFACE

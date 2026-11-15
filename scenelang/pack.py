@@ -22,10 +22,21 @@ from .compile import to_prose
 
 SKIP_KINDS = {"sky", "terrain"}
 PLANE_FILL = {"background": ("#c9d1f2", "#8fa0e0"), "midground": ("#bfe3df", "#6cc0b7"), "foreground": ("#f3d9b0", "#e0a24a")}
-GUIDE_PREFACE = ("A imagem anexa é só um guia de composição: as áreas coloridas mostram onde cada elemento fica no quadro e o manequim cinza "
-                 "mostra a pose. A imagem final é uma ilustração completa, sem molduras, retângulos, áreas coloridas, manequim nem texto "
-                 "do guia, e inteiramente no estilo descrito abaixo. O texto abaixo manda: cada elemento é exatamente o descrito, "
-                 "sem elementos extras.\n\n")
+_PREFACE_A = "A imagem anexa é só um guia de composição: as áreas coloridas mostram onde cada elemento fica no quadro"
+_PREFACE_B = ("A imagem final é uma ilustração completa, sem molduras, retângulos, áreas coloridas{mq} nem texto "
+              "do guia, e inteiramente no estilo descrito abaixo. O texto abaixo manda: cada elemento é exatamente o descrito, "
+              "sem elementos extras.\n\n")
+
+
+def guide_preface(scene) -> str:
+    """Abertura do prompt com guia; só fala do manequim quando alguma entidade tem pose."""
+    mannequin = any(isinstance(e, dict) and e.get("pose") for e in scene.data.get("entities") or [])
+    if mannequin:
+        return _PREFACE_A + " e o manequim cinza mostra a pose. " + _PREFACE_B.format(mq=", manequim")
+    return _PREFACE_A + ". " + _PREFACE_B.format(mq="")
+
+
+GUIDE_PREFACE = _PREFACE_A + " e o manequim cinza mostra a pose. " + _PREFACE_B.format(mq=", manequim")   # versão com pose
 PACK_VERSION = 1
 GUIDE_STYLES = ("blocks", "seg")
 # Modalidades de guia previstas (cada uma é um estilo novo em `guide_render`; o manifesto já diz a geometria de cada entidade).
@@ -296,7 +307,7 @@ def pack_result(scene, scene_text: str, out_dir: str | Path, only: str | None = 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     prompt = to_prose(scene)
-    prompt_guia = GUIDE_PREFACE + prompt
+    prompt_guia = guide_preface(scene) + prompt
     made: list[Path] = []
     warnings: list[str] = []
     dims: dict = {}
@@ -321,7 +332,7 @@ def pack_result(scene, scene_text: str, out_dir: str | Path, only: str | None = 
         parts = [f"{r['cor']} = {r['label']}" for r in info["entidades"] if r.get("cor")]
         parts += [f"{ov['cor']} = onde {ov['atras']} e {ov['frente']} se sobrepõem" for ov in info["sobreposicoes"] if ov.get("cor")]
         legend = "Legenda do guia (cor → elemento): " + "; ".join(parts) + ".\n\n"
-    prompt_guia = GUIDE_PREFACE + legend + prompt
+    prompt_guia = guide_preface(scene) + legend + prompt
 
     if only in (None, "text"):
         w("prompt.txt", prompt)

@@ -371,3 +371,13 @@ def test_medicao_na_imagem_cobre_predicados_geometricos():
     measured["cover_pilar_oeste"] = tuple(s.by_id["porta_entrada"].box)
     ok3, _ = recheck_asserts(s, measured)
     assert not next(r for r in ok3 if r.raw == "no_overlap(cover, door)").ok
+
+
+def test_guides_so_com_metricas_nao_emite_proporcao_de_personagem():
+    """Bug achado no teste do dungeon: planta sem personagem recebia 'o topo da cabeça na linha 0, o queixo…'."""
+    from pathlib import Path
+    from scenelang import api
+    txt = Path("examples/minecraft_dungeon_puzzle.yaml").read_text(encoding="utf-8")
+    out = api.compile_scene(txt, "prose")
+    text = out["prompt"] if isinstance(out, dict) and "prompt" in out else str(out)
+    assert "queixo" not in text and "topo da cabeça" not in text

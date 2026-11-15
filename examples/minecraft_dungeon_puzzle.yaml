@@ -45,7 +45,7 @@ entities:
 - id: atrio_central
   kind: structure
   label: o átrio das três portas
-  desc: sala de distribuição em cruz, piso de pedra lisa, mural com o mapa do templo
+  desc: sala de distribuição em cruz, piso de pedra lisa e livre de objetos, mural com o mapa do templo na parede norte
   plane: background
   box:
   - 0.3438
@@ -549,12 +549,13 @@ entities:
 - id: pilar_cobertura
   kind: structure
   label: o pilar de cobertura
-  desc: pilar de pedra que protege a plataforma das flechas do dispensador sem tapar a mira para o alvo
+  desc: pilar de pedra de um bloco, firme no chão ao lado leste do poço de lava e fora da lava, junto à parede sul, que protege a plataforma das
+    flechas do dispensador sem tapar a linha reta entre a plataforma e o alvo
   plane: midground
   box:
-  - 0.7812
-  - 0.5278
-  - 0.0312
+  - 0.8594
+  - 0.5556
+  - 0.0156
   - 0.0556
   tags:
   - pillar
@@ -717,6 +718,8 @@ asserts:
 - no_overlap(pushable, pushable)
 - no_overlap(lever, lamp)
 - no_overlap(hazard, platform)
+- no_overlap(pilar_cobertura, poco_lava)
+- no_overlap(lava, key)
 - line_of_sight(porta_ferro_alavancas, lampada_1)
 - line_of_sight(porta_ferro_alavancas, lampada_4)
 - line_of_sight(plataforma_arco, alvo_flecha)

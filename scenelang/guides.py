@@ -153,6 +153,8 @@ def guide_lines(scene) -> dict[str, float]:
         return {}
     if g.get("mode") == "model_proposes" and isinstance(g.get("proposal"), dict) and g["proposal"]:
         return {n: float(g["proposal"][n]) for n in LINE_ORDER if n in g["proposal"]}
+    if "metrics" in g and not any(k in g for k in ("canon", "lines", "subject", "axis", "proposal")):
+        return {}          # guides só com métricas de level design: não há personagem para ganhar linhas de cabeça e joelho
     heads = heads_of(g.get("canon", "stylized"))
     if heads is None:
         return {}
