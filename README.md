@@ -83,7 +83,8 @@ Target-independent representation (experimental): [`docs/UNIVERSAL_SCENE_IR.md`]
 | `pack SCENE [--guide-style blocks\|seg]` / `unpack --check` | Prompt + composition guide with a hashed manifest; integrity check on the way back. |
 | `locate` / `correct` | Locate entities in the image (5 states, with confidence) and write the next correction prompt, with history. |
 | `verify SCENE IMAGE` | Measure the image: colors, pixel grid, symmetry, guides, palette, background, spill, quiet zones, walkable connectivity. |
-| `project init\|layer\|add\|status\|round\|export` | Workspace: where each screen lives, what is measured, what is next; `export` writes the dataset. |
+| `project init\|layer\|add\|status\|round\|export\|report` | Workspace: where each screen lives, what is measured, what is next; `export` writes the dataset; `report` gives per-arm pass rates with intervals. |
+| `annotate-form` / `reconcile SCENE ANNOTATION` | Independent measurement: an annotator describes the image without seeing the scene; the tool matches, re-checks asserts, counts, and lists extras. |
 | `level SCENE --export mermaid\|tiled\|godot\|unity` | Export the graph and the blockout. |
 | `diff` / `patch` / `delta-prompt` | Compare scenes, apply addressed edits, write only the prompt of what changed. |
 | `bench plan\|record\|report` | Benchmark scaffolding (conventional × full × compact × incremental); offline metrics. |

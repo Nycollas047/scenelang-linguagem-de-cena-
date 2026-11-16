@@ -267,7 +267,8 @@ def status(root: str | Path) -> dict:
 
 
 def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | None = None, label: str | None = None,
-                 prompt_file: str | Path | None = None, generator: str | None = None) -> dict:
+                 prompt_file: str | Path | None = None, generator: str | None = None,
+                 arm: str | None = None, seed: int | None = None, annotation: str | Path | None = None) -> dict:
     """Mede a imagem de uma tela e guarda tudo: cópia em refs/, relatório e prompt seguinte em relatorios/."""
     from . import api
 
@@ -284,6 +285,25 @@ def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | No
         raise ProjectError(f"não achei a imagem {image}")
     if prompt_file is not None and not Path(prompt_file).is_file():      # antes de medir: não deixar rodada pela metade
         raise ProjectError(f"não achei o arquivo de prompt {prompt_file}")
+    recon, boxes_da_anotacao = None, False
+    if annotation is not None:      # medição independente: o anotador descreveu a imagem sem ver a cena
+        import json as _json
+
+        from . import reconcile as RC
+        from .validate import load_text as _lt
+        try:
+            raw = _json.loads(Path(annotation).read_text(encoding="utf-8"))
+            sc = _lt(scene_path.read_text(encoding="utf-8"))[1]
+            if sc is None:
+                raise ProjectError("a cena da tela tem erros; corrija antes de reconciliar")
+            recon = RC.reconcile(sc, raw)
+        except (OSError, ValueError) as e:       # ReconcileError e JSON inválido são ValueError
+            raise ProjectError(f"anotação inválida: {e}") from e
+        if boxes is None:
+            if not recon["caixas"]:
+                raise ProjectError("anotação inválida: nenhum objeto anotado casou com as entidades da cena (nomes sem palavra em comum); "
+                                   "confira os nomes ou passe --boxes")
+            boxes, boxes_da_anotacao = {k: v for k, v in recon["caixas"].items()}, True
     n = len(_rounds(root, sid)) + 1
     out = root / "relatorios" / sid / f"rodada-{n:02d}"
     res = api.correct_round(scene_path.read_text(encoding="utf-8"), str(image), str(out), boxes)
@@ -312,13 +332,19 @@ def record_round(root: str | Path, sid: str, image: str | Path, boxes: dict | No
     (out / "prompt.txt").write_text(prompt, encoding="utf-8")
     if boxes:
         (out / "caixas.json").write_text(json.dumps(boxes, ensure_ascii=False, indent=2), encoding="utf-8")
+    if recon is not None:
+        (out / "reconciliacao.json").write_text(json.dumps(recon, ensure_ascii=False, indent=2), encoding="utf-8")
     with Image.open(image) as im:
         size = list(im.size)
     (out / "rodada.json").write_text(json.dumps({
         "formato": META_FORMAT, "tela": sid, "rodada": n, "rotulo": label,
         "imagem": str(dest.relative_to(root)), "imagem_sha256": hashlib.sha256(image.read_bytes()).hexdigest(), "imagem_tamanho": size,
-        "caixas": "informadas" if boxes else "nenhuma", "prompt_origem": origem, "gerador": generator}, ensure_ascii=False, indent=2), encoding="utf-8")
+        "caixas": "anotacao_independente" if boxes_da_anotacao else ("informadas" if boxes else "nenhuma"),
+        "prompt_origem": origem, "gerador": generator, "braco": arm, "seed": seed,
+        "anotador": recon["anotador"] if recon else None, "anotacao_cega": recon["cego"] if recon else None}, ensure_ascii=False, indent=2), encoding="utf-8")
     res["rodada"] = n
+    if recon is not None:
+        res["reconciliacao"] = recon
     res["imagem_guardada"] = str(dest)
     res["pasta"] = str(out)
     return res
@@ -348,13 +374,81 @@ def export_dataset(root: str | Path) -> tuple[list[dict], list[str]]:
             records.append({
                 "formato": DATASET_FORMAT, "projeto": data.get("projeto"), "tela": sid, "camada": t.get("camada"),
                 "rodada": meta["rodada"], "rotulo": meta.get("rotulo"), "gerador": meta.get("gerador"),
+                "braco": meta.get("braco"), "seed": meta.get("seed"),
                 "cena_hash": rep.get("hash_cena_completo"), "cena_yaml": (r / "cena.yaml").read_text(encoding="utf-8"),
                 "prompt": (r / "prompt.txt").read_text(encoding="utf-8"), "prompt_origem": meta.get("prompt_origem", "desconhecida"),
                 "imagem": {"caminho": meta["imagem"], "sha256": meta["imagem_sha256"], "tamanho": meta["imagem_tamanho"]},
-                "anotacao": {"caixas": meta.get("caixas"), "observacao": "caixas 'informadas' vêm de quem olhou a imagem, não de um detector"},
+                "anotacao": {"caixas": meta.get("caixas"), "anotador": meta.get("anotador"), "cego": meta.get("anotacao_cega"),
+                             "observacao": "caixas 'informadas' vêm de quem olhou a imagem (pode conhecer a cena); 'anotacao_independente' vêm de uma anotação feita sem a cena; nenhuma é de um detector"},
+                "reconciliacao": json.loads((r / "reconciliacao.json").read_text(encoding="utf-8")) if (r / "reconciliacao.json").is_file() else None,
                 "medicoes": [{k: m.get(k) for k in ("check", "ok", "detail", "source", "confidence", "classe")} for m in rep.get("medicoes") or []],
                 "nao_medidos": rep.get("nao_medidos"),
                 "correcoes": rep.get("correcoes"),
                 "prompt_seguinte": nxt.read_text(encoding="utf-8") if nxt.is_file() else None,
             })
     return records, warns
+
+
+MIN_N = 5
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Intervalo de Wilson para uma proporção k/n (n pequeno é o caso normal aqui; o intervalo mostra o quanto isso vale)."""
+    if n <= 0:
+        return (0.0, 1.0)
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / d
+    return (max(0.0, c - h), min(1.0, c + h))
+
+
+def report(root: str | Path, sid: str) -> dict:
+    """Por restrição e por braço: em quantas rodadas passou (k de n), com intervalo de Wilson. Uma imagem por braço não mede variação."""
+    import json
+
+    root = Path(root)
+    data = _read_index(root)
+    if not any(isinstance(t, dict) and t.get("id") == sid for t in data.get("telas") or []):
+        raise ProjectError(f"tela desconhecida: {sid!r}")
+    arms: dict[str, dict] = {}
+    for r in _rounds(root, sid):
+        meta_f, rep_f = r / "rodada.json", r / "relatorio.json"
+        if not (meta_f.is_file() and rep_f.is_file()):
+            continue
+        meta, rep = json.loads(meta_f.read_text(encoding="utf-8")), json.loads(rep_f.read_text(encoding="utf-8"))
+        arm = meta.get("braco") or "(sem braço)"
+        a = arms.setdefault(arm, {"rodadas": 0, "seeds": [], "restricoes": {}})
+        a["rodadas"] += 1
+        a["seeds"].append(meta.get("seed"))
+        seen = set()
+        items = [(m.get("check"), m.get("ok")) for m in rep.get("medicoes") or []]
+        rf = r / "reconciliacao.json"
+        if rf.is_file():
+            items += [("[anotação] " + x["raw"], x["ok"]) for x in json.loads(rf.read_text(encoding="utf-8")).get("asserts") or []]
+        for check, ok in items:
+            if check is None or ok not in (True, False) or check in seen:
+                continue
+            seen.add(check)
+            c = a["restricoes"].setdefault(check, {"k": 0, "n": 0})
+            c["n"] += 1
+            c["k"] += 1 if ok else 0
+    for a in arms.values():
+        for c in a["restricoes"].values():
+            lo, hi = wilson(c["k"], c["n"])
+            c["taxa"], c["ic95"] = round(c["k"] / c["n"], 3), [round(lo, 3), round(hi, 3)]
+            c["n_insuficiente"] = c["n"] < MIN_N
+        a["repetido"] = a["rodadas"] > 1
+    return {"tela": sid, "min_n": MIN_N, "bracos": arms}
+
+
+def report_text(rep: dict) -> str:
+    lines = [f"tela {rep['tela']}: restrição passou em k de n rodadas, por braço (IC 95% de Wilson)"]
+    if not rep["bracos"]:
+        return lines[0] + "\n(nenhuma rodada medida)"
+    for arm, a in sorted(rep["bracos"].items()):
+        lines.append(f"\n[{arm}] {a['rodadas']} rodada(s)" + ("" if a["repetido"] else "  · UMA rodada: não mede variação"))
+        for check, c in a["restricoes"].items():
+            flag = "  (n pequeno: não conclua)" if c["n_insuficiente"] else ""
+            lines.append(f"  {c['k']}/{c['n']}  IC [{c['ic95'][0]:.2f}, {c['ic95'][1]:.2f}]  {check}{flag}")
+    return "\n".join(lines)

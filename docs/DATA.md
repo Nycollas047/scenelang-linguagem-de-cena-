@@ -15,7 +15,9 @@ One record per measured round (`scenelang project round` → `scenelang project 
 | `prompt`, `prompt_origem` | The prompt that was actually given to the generator. `informado` = you passed `--prompt-file`; `compilado_da_cena_assumido` = the compiled prompt, **assumed** (not confirmed) to be the one used. |
 | `gerador` | Generator name/version, if you passed `--generator`. Otherwise `null`: the record has no provenance on that point. |
 | `imagem` | Path inside the project, SHA-256 and size. The image itself is not embedded in the JSONL. |
-| `anotacao.caixas` | Where the entity boxes came from. `informadas` = a person looked at the image and wrote them; this is *not* a detector. |
+| `anotacao` | Where the entity boxes came from. `informadas` = someone looked at the image and wrote them (possibly knowing the scene); `anotacao_independente` = derived from an annotation written *without* the scene (`anotador`, `cego` as declared by the annotator; the tool cannot verify blindness). Never a detector. |
+| `reconciliacao` | Only with `--annotations`: matched pairs with match scores (audit them), asserts re-evaluated on the annotated boxes, `count(...)` measured from the annotation, `extras` (objects in the image that the scene does not declare) and `ausentes` (declared entities nobody annotated). |
+| `braco`, `seed` | Test arm (`--arm`) and generator seed (`--seed`), when given. Repetitions of one arm are what make a pass rate meaningful. |
 | `medicoes[]` | One entry per checked constraint: `check` (e.g. `left_of(knight, boss)`), `ok`, `detail`, `source`, `confidence`, `classe`. |
 | `nao_medidos` | Constraints and entities that could **not** be measured, with the reason. Absence of a failure is not recorded as a pass. |
 | `correcoes`, `prompt_seguinte` | What the correction engine proposed after the failures, and the next-round prompt. |
@@ -30,6 +32,24 @@ scenelang project round work boss_arena image.png --boxes boxes.json --label arm
     --prompt-file prompt_used.txt --generator "name-and-version"
 scenelang project export work --out data.jsonl
 ```
+
+### Independent measurement and repetitions
+
+Boxes written by someone who knows the scene mix measurement and expectation, and a tool that only measures declared
+entities cannot see what the model *added*. So:
+
+```
+scenelang annotate-form image.png > form.txt          # neutral instructions: give these to the annotator, NOT the scene
+# annotator returns scenelang.anotacao/1 JSON: free names + boxes of everything visible
+scenelang reconcile scene.yaml annotation.json        # matches names to entities, re-checks asserts, lists extras
+scenelang project round work boss_arena image.png --annotations annotation.json --arm B --seed 3 \
+    --prompt-file prompt_used.txt --generator "name-and-version"
+scenelang project report work boss_arena              # per constraint and arm: passed k of n, Wilson 95% interval
+```
+
+Limits, stated plainly: name matching is a heuristic (shared word stems, geometry as a tie-break), so the match table is
+meant to be read; `cego` is the annotator's own declaration; a single round per arm shows no variation, and `report`
+flags `n < 5` as "do not conclude". An annotator that is another model brings its own errors.
 
 ## What this data could be used for (hypotheses)
 

@@ -261,7 +261,9 @@ projeto/
 | `project layer DIR ID [--desc D]` | declara uma camada nomeada (grupo de telas) |
 | `project add DIR ID [--layer L] [--note N]` | cria `telas/ID.yaml` com uma cena inicial válida e a registra |
 | `project status DIR [--json]` | por tela: validade, asserts, rodadas, medições, DESATUALIZADA, e o próximo passo |
-| `project round DIR ID IMAGEM [--boxes J] [--label L]` | mede a imagem, guarda cópia em `refs/` e a rodada em `relatorios/` |
+| `project round DIR ID IMAGEM [--boxes J] [--label L] [--arm A] [--seed N] [--annotations ANOT.json]` | mede a imagem, guarda cópia em `refs/` e a rodada em `relatorios/`; com `--annotations` as caixas e as contagens vêm de uma anotação feita sem ver a cena |
+| `project report DIR ID [--json]` | por restrição e por braço: passou em k de n rodadas, com intervalo de Wilson; n < 5 vem marcado |
+| `annotate-form [IMAGEM]` / `reconcile CENA ANOTACAO [--json]` | instrução neutra para o anotador / casa a anotação com a cena, reavalia asserts, confere `count`, lista extras e ausentes |
 
 O estado é derivado dos arquivos a cada `status` (nada é guardado em dobro). "Desatualizada" compara o hash canônico da
 cena de hoje com o da última medição, então reformatar ou mexer na data do arquivo não conta. Asserts sem medida

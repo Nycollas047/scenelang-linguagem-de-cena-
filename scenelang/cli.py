@@ -377,7 +377,7 @@ def cmd_project(a) -> int:
 
     from . import project as PJ
 
-    need = {"add": ("id",), "layer": ("id",), "round": ("id", "image")}.get(a.action, ())
+    need = {"add": ("id",), "layer": ("id",), "round": ("id", "image"), "report": ("id",)}.get(a.action, ())
     for k in need:
         if getattr(a, k) is None:
             print(f"erro: `project {a.action}` precisa de {' e '.join(need)}", file=sys.stderr)
@@ -394,13 +394,20 @@ def cmd_project(a) -> int:
             print(f"tela {a.id!r} criada em {p} e registrada no índice")
         elif a.action == "round":
             boxes = _json.loads(Path(a.boxes).read_text(encoding="utf-8")) if a.boxes else None
-            res = PJ.record_round(a.dir, a.id, a.image, boxes, a.label, a.prompt_file, a.generator)
+            res = PJ.record_round(a.dir, a.id, a.image, boxes, a.label, a.prompt_file, a.generator, a.arm, a.seed, a.annotations)
             print(f"rodada {res['rodada']} guardada em {res['pasta']}")
             print(f"imagem guardada em {res['imagem_guardada']}")
             for f in res.get("findings", []):
                 print(("✓ " if f["ok"] else "✗ ") + f["check"] + "  " + f["detail"])
+            if res.get("reconciliacao"):
+                from . import reconcile as RC
+
+                print("\nmedição independente:\n" + RC.summary(res["reconciliacao"]))
             if res.get("corrections"):
                 print("correções para a próxima rodada:\n" + "\n".join(f"  - {c}" for c in res["corrections"]))
+        elif a.action == "report":
+            rep = PJ.report(a.dir, a.id)
+            print(_json.dumps(rep, ensure_ascii=False, indent=2) if a.json else PJ.report_text(rep))
         elif a.action == "export":
             if not a.out:
                 print("erro: `project export` precisa de --out ARQUIVO.jsonl", file=sys.stderr)
@@ -436,6 +443,28 @@ def cmd_project(a) -> int:
         print(f"erro: {e}", file=sys.stderr)
         return 2
     return 0
+
+
+def cmd_annotate_form(a) -> int:
+    from . import reconcile as RC
+
+    print(RC.form_text(a.image or "a imagem"))
+    return 0
+
+
+def cmd_reconcile(a) -> int:
+    import json as _json
+
+    from . import reconcile as RC
+
+    scene, _ = _load(a.scene)
+    try:
+        rec = RC.reconcile(scene, _json.loads(Path(a.annotation).read_text(encoding="utf-8")))
+    except (RC.ReconcileError, ValueError, OSError) as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 2
+    print(_json.dumps(rec, ensure_ascii=False, indent=2) if a.json else RC.summary(rec))
+    return 0 if all(x["ok"] for x in rec["asserts"]) else 1
 
 
 def cmd_correct(a) -> int:
@@ -703,12 +732,23 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--calibration", metavar="JSON", help="calibração do rig: osso → eixo → {axis, sign, offset}; sem ela a saída vem marcada como não calibrada")
     s.set_defaults(fn=cmd_pose)
 
+    s = sub.add_parser("annotate-form", help="instrução para um anotador descrever a imagem SEM ver a cena")
+    s.add_argument("image", nargs="?")
+    s.set_defaults(fn=cmd_annotate_form)
+
+    s = sub.add_parser("reconcile", help="casa a anotação independente da imagem com a cena: mede, conta e lista extras")
+    s.add_argument("scene"); s.add_argument("annotation"); s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_reconcile)
+
     s = sub.add_parser("project", help="espaço de trabalho: onde cada tela mora, o que já foi medido e o que falta")
-    s.add_argument("action", choices=["init", "add", "layer", "status", "round", "export"])
+    s.add_argument("action", choices=["init", "add", "layer", "status", "round", "export", "report"])
     s.add_argument("dir"); s.add_argument("id", nargs="?")
     s.add_argument("image", nargs="?")
     s.add_argument("--name"); s.add_argument("--goal"); s.add_argument("--layer"); s.add_argument("--note"); s.add_argument("--desc")
     s.add_argument("--boxes"); s.add_argument("--label"); s.add_argument("--json", action="store_true"); s.add_argument("--out"); s.add_argument("--generator", help="gerador e versão (ex.: nome-do-modelo 2026-11); sem isso o dado fica sem proveniência")
+    s.add_argument("--arm", help="braço do teste (ex.: A, B, C ou 'com-guia'); repetições do mesmo braço entram juntas no `report`")
+    s.add_argument("--seed", type=int, help="seed usada na geração, se o gerador expõe uma")
+    s.add_argument("--annotations", help="anotação independente (scenelang.anotacao/1) da imagem: vira as caixas medidas e confere as contagens")
     s.add_argument("--prompt-file", help="o prompt realmente usado (sem ele, grava o compilado e marca como assumido)")
     s.set_defaults(fn=cmd_project)
 
